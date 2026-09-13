@@ -7,6 +7,22 @@
 #include <cstdint>
 #include <limits>
 
+namespace javelin::random {
+
+/// @returns `float` value in range [0, 1).
+template<typename Generator>
+float random(Generator& g) {
+    // We could use `generate_canonical`, but that results in a call to `log`.
+    // Profiling, this method is faster:
+    // Before, with `generate_canonical`: Samples per pixel: 1023, Time: 20.967s
+    //                             After: Samples per pixel: 1023, Time: 12.055s
+    std::uint32_t x = static_cast<std::uint32_t>(g()) >> 8; // 24 bits
+    constexpr float inv2p24 = 0x1.0p-24f; // 2^(-24)
+    return static_cast<float>(x) * inv2p24;
+}
+
+} // namespace javelin::random
+
 // fast random number generator based pcg32_fast
 namespace PCG32 {
 

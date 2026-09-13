@@ -26,7 +26,7 @@ std::uint32_t pcg32_fast() {
 }
 
 float rand() {
-    return std::generate_canonical<float, 32>(RandomGenerator);
+    return javelin::random::random(RandomGenerator);
 }
 
 } // namespace PCG32

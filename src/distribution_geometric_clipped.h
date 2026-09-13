@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "random.h"
 #include <cmath>
 
 class ClippedGeometricDistribution {
@@ -20,7 +21,7 @@ public:
 
     template<typename Generator>
     result_type operator()(Generator& g) const {
-        float u = std::generate_canonical<float, 32>(g);
+        float u = javelin::random::random(g);
         u *= _normalization;
         return std::max(0, static_cast<result_type>(
             std::ceil(std::log2f(1.0f - u) * _invLogBase) - 1.0f));
@@ -54,7 +55,7 @@ public:
 
     template<typename Generator>
     result_type operator()(Generator& g) const {
-        float u = std::generate_canonical<float, 32>(g);
+        float u = javelin::random::random(g);
         u *= _normalization;
         u += _offset;
         if (u < 1.0f)
