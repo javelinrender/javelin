@@ -2,14 +2,16 @@
 // Licensed under the MIT License. See LICENSE in the project root for license
 // information.
 
-#include "mlt.h"
+#include "metropolis_integrator.h"
 
+#include <memory>
 #include <print>
-
-#include "tracy/Tracy.hpp"
+#include <utility>
+#include <vector>
 
 #include "distribution_geometric_clipped.h"
 #include "path.h"
+#include "profiling.h"
 #include "random.h"
 
 namespace {
@@ -64,7 +66,51 @@ float invGeometryTerm(const Path::Vertex& a, const Path::Vertex& b) {
 
 } // namespace
 
-using namespace Metropolis;
+namespace javelin::integrators {
+
+namespace {
+
+class MetropolisResult final : public Integrator::Result {
+public:
+    MetropolisResult(
+            std::vector<Image> accumulationBuffers,
+            int width,
+            int height,
+            float scaleFactor,
+            int samplesPerPixel)
+        : _accumulationBuffers(std::move(accumulationBuffers)),
+          _width(width),
+          _height(height),
+          _scaleFactor(scaleFactor),
+          _samplesPerPixel(samplesPerPixel) {}
+
+    Image evaluate() const override {
+        Image image(_width, _height, 4);
+        for (int y = 0; y < _height; ++y) {
+            for (int x = 0; x < _width; ++x) {
+                Vec3 radiance(0.0f);
+                for (const Image& accumulation : _accumulationBuffers)
+                    radiance += accumulation.rgb(x, y) * _scaleFactor;
+                image.rgb(x, y) = radiance;
+                image.a(x, y) = 1.0f;
+            }
+        }
+        return image;
+    }
+
+    int samplesPerPixel() const override { return _samplesPerPixel; }
+
+private:
+    std::vector<Image> _accumulationBuffers;
+    int _width;
+    int _height;
+    float _scaleFactor;
+    int _samplesPerPixel;
+};
+
+} // namespace
+
+using namespace metropolis;
 
 std::optional<MutationInfo> PathSpaceMutator::bidirectionalMutation(
         const Scene& scene) {
@@ -277,9 +323,9 @@ std::optional<MutationInfo> PathSpaceMutator::computeRandomMutation(
     return std::nullopt;
 }
 
-void PathSpaceMutator::initialize(const Scene& scene) {
+void PathSpaceMutator::initialize(const Scene& scene, std::stop_token stopToken) {
     // Set up a valid initial state, loop until we find one.
-    while (!_renderer.isStopping() && !_currentPath) {
+    while (!stopToken.stop_requested() && !_currentPath) {
         // Create a random path and evaluate it.
         const auto [pixel, ray] = randomEyeRay(scene);
         const Path path = Path::createRandomEyePath(scene, ray);
@@ -300,24 +346,25 @@ void PathSpaceMutator::acceptMutation(State&& newState) {
     _currentPath = std::move(_potentialPath);
 }
 
-Mutator::Mutator(const MLT& renderer) : _renderer(renderer) {}
+Mutator::Mutator(const MetropolisIntegrator& renderer) : _renderer(renderer) {}
 
-PathSpaceMutator::PathSpaceMutator(const MLT& renderer) :
+PathSpaceMutator::PathSpaceMutator(const MetropolisIntegrator& renderer) :
     Mutator(renderer), _mutationDistribution{
-                1.0  * _renderer.getConfig().newPathMutation,
-                1.0  * _renderer.getConfig().lensPerturbation,
-                1.0  * _renderer.getConfig().multiChainPerturbation,
-                1.0  * _renderer.getConfig().bidirectionalMutation} {}
+                1.0  * _renderer.getSettings().newPathMutation.value,
+                1.0  * _renderer.getSettings().lensPerturbation.value,
+                1.0  * _renderer.getSettings().multiChainPerturbation.value,
+                1.0  * _renderer.getSettings().bidirectionalMutation.value} {}
 
-MLTProcess::MLTProcess(const MLT& renderer, int width, int height) 
+MLTProcess::MLTProcess(const MetropolisIntegrator& renderer, int width, int height) 
         : _renderer(renderer), _mutator(std::make_unique<PathSpaceMutator>(renderer)), _accumulationBuffer(width, height, 3) {}
 
-void MLTProcess::accumulate(const Scene& scene, const int numMutations) {
-    ZoneScoped;
-    _mutator->initialize(scene);
+void MLTProcess::accumulate(
+        const Scene& scene, const int numMutations, std::stop_token stopToken) {
+    JAVELIN_ZONE_SCOPED;
+    _mutator->initialize(scene, stopToken);
 
     for (std::size_t i = 0; i < numMutations; ++i) {
-        if (_renderer.isStopping())
+        if (stopToken.stop_requested())
             break;
 
         const State& currentState = _mutator->getCurrentState();
@@ -358,7 +405,8 @@ void MLTProcess::accumulate(const Scene& scene, const int numMutations) {
 
     const std::size_t numPixels =
         _accumulationBuffer.width() * _accumulationBuffer.height();
-    _averageSamplesPerPixel += static_cast<float>(numMutations) / numPixels;
+    if (!stopToken.stop_requested())
+        _averageSamplesPerPixel += static_cast<float>(numMutations) / numPixels;
 }
 
 void MLTProcess::reset() {
@@ -368,70 +416,63 @@ void MLTProcess::reset() {
     _averageSamplesPerPixel = 0;
 }
 
-MLT::MLT(const EnabledMutations& config, int width, int height, int numProcesses)
-        : _config{config}, _width{width}, _height{height} {
-    if (config.newPathMutation)
+MetropolisIntegrator::MetropolisIntegrator(const RenderSettings& settings)
+        : _settings{settings} {
+    if (_settings.newPathMutation.value)
         std::println("New path mutations enabled");
-    if (config.lensPerturbation)
+    if (_settings.lensPerturbation.value)
         std::println("Lens perturbations enabled");
-    if (config.multiChainPerturbation) 
+    if (_settings.multiChainPerturbation.value) 
         std::println("Multi-chain perturbations enabled");
-    if (config.bidirectionalMutation)  
+    if (_settings.bidirectionalMutation.value)  
         std::println("Bidirectional mutations enabled");
-    if (numProcesses < 1)
-        numProcesses = 1;
-    for (int i = 0; i < numProcesses; ++i) {
-        _processes.emplace_back(*this, width, height);
+    for (int i = 0; i < _settings.metropolisMarkovChains.value; ++i) {
+        _processes.emplace_back(*this, _settings.width.value, _settings.height.value);
     }
 }
 
-void MLT::accumulate(const Scene& scene, int numSamples, ThreadPool* pool) {
-    ZoneScoped;
+std::unique_ptr<Integrator::Result> MetropolisIntegrator::accumulate(
+        const Scene& scene, ThreadPool* pool, int sampleCount,
+        std::stop_token stopToken) {
+    JAVELIN_ZONE_SCOPED;
     const int numMutationsPerProcess =
-        numSamples * _width * _height / _processes.size();
-    if (pool) {
-        for (MLTProcess& process : _processes) {
-            pool->assignWork([&, process = &process]() {
-                    process->accumulate(scene, numMutationsPerProcess);
-                });
-        }
-        pool->wait();
-    } else {
-        for (MLTProcess& process : _processes)
-            process.accumulate(scene, numMutationsPerProcess);
+        sampleCount * _settings.width.value * _settings.height.value / _processes.size();
+    ThreadPool::TaskGroup group;
+    for (MLTProcess& process : _processes) {
+        auto work = [&, process = &process] {
+            process->accumulate(scene, numMutationsPerProcess, stopToken);
+        };
+        if (pool)
+            group.assignWork(*pool, std::move(work));
+        else
+            work();
     }
-    _averageSamplesPerPixel += numSamples;
-}
-
-void MLT::updateFrameBuffer(Image& frameBuffer) const {
-    ZoneScoped;
-    frameBuffer.clear();
-    // Merge the contents of the different processes' accumulation buffers
+    group.wait();
+    if (stopToken.stop_requested())
+        return nullptr;
+    _averageSamplesPerPixel += sampleCount;
+    std::vector<Image> accumulationBuffers;
+    {
+        JAVELIN_ZONE_SCOPED_N("Copy accumulation buffers");
+        accumulationBuffers.reserve(_processes.size());
+        for (const MLTProcess& process : _processes)
+            accumulationBuffers.push_back(process.accumulationBuffer());
+    }
+    const int width = _settings.width.value;
+    const int height = _settings.height.value;
     const float scaleFactor = computeScaleFactor();
-    for (const MLTProcess& process : _processes) {
-        for (int y = 0; y < frameBuffer.height(); ++y) {
-            for (int x = 0; x < frameBuffer.width(); ++x) {
-                frameBuffer.rgb(x, y) +=
-                    process.accumulationBuffer().rgb(x, y) * scaleFactor;
-            }
-        }
-    }
-    // Final image correction pass
-    for (int y = 0; y < frameBuffer.height(); ++y) {
-        for (int x = 0; x < frameBuffer.width(); ++x) {
-            frameBuffer.rgb(x, y) = Image::applyCorrection(frameBuffer.rgb(x, y));
-        }
-    }
+    return std::make_unique<MetropolisResult>(
+        std::move(accumulationBuffers), width, height, scaleFactor,
+        _averageSamplesPerPixel);
 }
 
-void MLT::reset() {
-    IRenderer::reset();
+void MetropolisIntegrator::reset() {
     for (MLTProcess& process : _processes)
         process.reset();
     _averageSamplesPerPixel = 0;
 }
 
-float MLT::computeScaleFactor() const {
+float MetropolisIntegrator::computeScaleFactor() const {
     float totalAccumulatedLuminance = 0.0f;
     int totalNumNewPathMutations = 0;
     for (const MLTProcess& process : _processes) {
@@ -440,3 +481,5 @@ float MLT::computeScaleFactor() const {
     }
     return (totalAccumulatedLuminance / totalNumNewPathMutations) / _averageSamplesPerPixel;
 }
+
+} // namespace javelin::integrators
