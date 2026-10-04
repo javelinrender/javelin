@@ -140,6 +140,8 @@ void Renderer::run(const Scene& scene, ThreadPool* pool,
         {
             std::unique_lock lock(_mutex);
             if (_completedSamples >= _settings.samplesPerPixel.value) {
+                // On completion, ensure the final integral is evaluated.
+                _integrationCV.wait(lock, [&] { return !_integrating; });
                 _finished = true;
                 _paused = true;
                 _updateCV.notify_all();
