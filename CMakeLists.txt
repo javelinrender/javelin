@@ -9,7 +9,7 @@ option(JAVELIN_ENABLE_PROFILING "Enable profiling" OFF)
 
 find_package(fastgltf REQUIRED)
 find_package(glm REQUIRED)
-find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Quick QuickControls2)
 
 if(JAVELIN_ENABLE_PROFILING)
     find_package(Tracy REQUIRED)
@@ -51,6 +51,7 @@ qt_add_qml_module(javelin
         src/qml/EnumParameterEditor.qml
         src/qml/IntegerParameterEditor.qml
         src/qml/BoolParameterEditor.qml
+        src/qml/FilePathParameterEditor.qml
 )
 
 # Enable SIMD (SSE/AVX) for x86/x64.
@@ -90,6 +91,7 @@ target_include_directories(javelin PRIVATE
 target_link_libraries(javelin PRIVATE
     fastgltf::fastgltf
     glm::glm
+    Qt6::Widgets
     Qt6::Quick
     Qt6::QuickControls2
 )

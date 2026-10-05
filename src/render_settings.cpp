@@ -5,6 +5,8 @@
 #include "render_settings.h"
 
 #include <charconv>
+#include <cctype>
+#include <filesystem>
 #include <format>
 #include <utility>
 
@@ -57,6 +59,12 @@ std::optional<std::string> setValue(
     return std::nullopt;
 }
 
+std::optional<std::string> setValue(
+        FilePathParameter& parameter, std::string_view value) {
+    parameter.value = value;
+    return std::nullopt;
+}
+
 template<typename Enum>
 std::optional<std::string> validate(const EnumParameter<Enum>& parameter) {
     using Choice = EnumParameter<Enum>::Choice;
@@ -82,6 +90,33 @@ std::optional<std::string> validate(const BoolParameter&) {
     return std::nullopt;
 }
 
+std::optional<std::string> validate(const FilePathParameter& parameter) {
+    if (parameter.value.empty())
+        return std::format("{} must not be empty.", parameter.label);
+    if (parameter.extensions.empty())
+        return std::nullopt;
+
+    std::string extension =
+        std::filesystem::path(parameter.value).extension().string();
+    std::transform(
+        extension.begin(),
+        extension.end(),
+        extension.begin(),
+        [](unsigned char character) { return std::tolower(character); });
+    for (const std::string_view allowed : parameter.extensions) {
+        if (extension == allowed)
+            return std::nullopt;
+    }
+    std::string extensions;
+    for (const std::string_view allowed : parameter.extensions) {
+        if (!extensions.empty())
+            extensions += ", ";
+        extensions += allowed;
+    }
+    return std::format("{} must use one of these extensions: {}.",
+        parameter.label, extensions);
+}
+
 template<typename Enum>
 void appendHelpDetails(std::string& help, const EnumParameter<Enum>& parameter) {
     help += " (choices: ";
@@ -103,6 +138,18 @@ void appendHelpDetails(std::string& help, const IntegerParameter<Integer>& param
 
 void appendHelpDetails(std::string& help, const BoolParameter&) {
     help += " (choices: true, false)";
+}
+
+void appendHelpDetails(std::string& help, const FilePathParameter& parameter) {
+    if (parameter.extensions.empty())
+        return;
+    help += " (extensions: ";
+    for (std::size_t i = 0; i < parameter.extensions.size(); ++i) {
+        if (i != 0)
+            help += ", ";
+        help += parameter.extensions[i];
+    }
+    help += ')';
 }
 
 } // namespace

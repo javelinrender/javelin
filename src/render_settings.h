@@ -72,7 +72,22 @@ struct BoolParameter {
     ParameterVisibility visible = true;
 };
 
+struct FilePathParameter {
+    std::string_view name;
+    std::string_view label;
+    std::string value;
+    std::vector<std::string_view> extensions;
+    ParameterVisibility visible = true;
+};
+
 struct RenderSettings {
+    FilePathParameter sceneFile{
+        .name = "scene-file",
+        .label = "Scene File",
+        .value = "./media/cornellbox_plane_light.glb",
+        .extensions = {".glb"},
+    };
+
     enum class Integrator {
         Unidirectional,
         Metropolis,
@@ -160,6 +175,7 @@ struct RenderSettings {
 
     auto parameters() {
         return std::tie(
+            sceneFile,
             integrator,
             width,
             height,

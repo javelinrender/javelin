@@ -9,10 +9,11 @@ ColumnLayout {
 
     function editorSource(type) {
         switch (type) {
-        case "enum":    return "EnumParameterEditor.qml"
-        case "integer": return "IntegerParameterEditor.qml"
-        case "bool":    return "BoolParameterEditor.qml"
-        default:        return ""
+        case "enum":        return "EnumParameterEditor.qml"
+        case "integer":     return "IntegerParameterEditor.qml"
+        case "bool":        return "BoolParameterEditor.qml"
+        case "file_path":   return "FilePathParameterEditor.qml"
+        default:            return ""
         }
     }
 

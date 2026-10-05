@@ -110,6 +110,13 @@ bool Scene::loadGltf(const std::filesystem::path& filePath) {
         return false;
     }
 
+    // In case we are loading a new scene we need to clear the existing one.
+    meshes.clear();
+    textures.clear();
+    images.clear();
+    lights.clear();
+    materials.clear();
+
     // Load images
     // Adapted from example:
     // https://github.com/spnda/fastgltf/blob/main/examples/gl_viewer/gl_viewer.cpp

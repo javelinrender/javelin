@@ -4,7 +4,7 @@ import QtQuick.Layouts
 
 ApplicationWindow {
     id: window
-    minimumWidth: 360
+    minimumWidth: 500
     minimumHeight: Math.ceil(contentLayout.implicitHeight + 24)
     title: "Javelin"
     visible: true

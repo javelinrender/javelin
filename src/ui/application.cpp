@@ -12,11 +12,10 @@
 namespace javelin::ui {
 
 Application::Application(int& argc, char* argv[], RenderSettings settings)
-    : QGuiApplication(argc, argv),
+    : QApplication(argc, argv),
       _application(std::move(settings)),
       _settingsModel(_application.settings()),
       _viewport(_application.renderer()) {
-    QQuickStyle::setStyle("Fusion");
     connect(&_settingsModel, &RenderSettingsModel::settingsChanged,
         this, &Application::handleSettingsChanged);
     connect(&_viewport, &Viewport::renderingFinished,

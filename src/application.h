@@ -34,7 +34,7 @@ private:
     Renderer _renderer;
 
     bool _initialized = false;
-
+    std::string _loadedScenePath;
 };
 
 } // namespace javelin

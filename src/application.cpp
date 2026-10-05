@@ -19,15 +19,19 @@ Application::Application(RenderSettings settings)
 
 
 bool Application::initialize() {
-    if (!_initialized)
-        _initialized = _scene.loadGltf("./media/cornellbox_plane_light.glb");
-    return _initialized;
+    if (_initialized && _loadedScenePath == _settings.sceneFile.value)
+        return true;
+    if (!_scene.loadGltf(_settings.sceneFile.value))
+        return false;
+    _loadedScenePath = _settings.sceneFile.value;
+    _initialized = true;
+    return true;
 }
 
 void Application::startRender() {
-    if (!_initialized)
-        return;
     _renderer.stop();
+    if (!initialize())
+        return;
     _pool.setThreadCount(_settings.threadPoolSize.value);
     _scene.camera.setResolution(_settings.width.value, _settings.height.value);
     _renderer.start(_scene, _settings, &_pool, 32);

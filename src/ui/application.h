@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include <QGuiApplication>
+#include <QApplication>
 #include <QQmlApplicationEngine>
 
 #include "../application.h"
@@ -13,7 +13,7 @@
 
 namespace javelin::ui {
 
-class Application : public QGuiApplication {
+class Application : public QApplication {
     Q_OBJECT
     Q_PROPERTY(bool running READ running NOTIFY renderStateChanged)
     Q_PROPERTY(bool paused READ paused NOTIFY renderStateChanged)

@@ -6,6 +6,7 @@
 
 #include <limits>
 
+#include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 #include <string_view>
@@ -64,6 +65,24 @@ QVariantMap parameterMap(const BoolParameter& parameter) {
     };
 }
 
+QVariantMap parameterMap(const FilePathParameter& parameter) {
+    QStringList filters;
+    for (const std::string_view extension : parameter.extensions)
+        filters.append(QStringLiteral("*%1").arg(toQString(extension)));
+    const QString nameFilter = filters.isEmpty()
+        ? QStringLiteral("All files (*)")
+        : QStringLiteral("%1 (%2)").arg(
+            toQString(parameter.label),
+            filters.join(' '));
+    return {
+        {"name", toQString(parameter.name)},
+        {"label", toQString(parameter.label)},
+        {"type", "file_path"},
+        {"value", toQString(parameter.value)},
+        {"nameFilters", QStringList{nameFilter}},
+    };
+}
+
 QList<QVariantMap> parameterRows(const RenderSettings& settings) {
     QList<QVariantMap> result;
     settings.forEachParameter([&](const auto& parameter) {
@@ -98,7 +117,9 @@ bool RenderSettingsModel::setValue(const QString& name, const QVariant& value) {
     const std::optional<std::string> error = setParameterValue(
         _options,
         name.toStdString(),
-        value.toString().toStdString());
+        (value.metaType().id() == QMetaType::QUrl
+            ? value.toUrl().toLocalFile()
+            : value.toString()).toStdString());
 
     if (error)
         return false;
