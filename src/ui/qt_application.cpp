@@ -2,7 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license
 // information.
 
-#include "application.h"
+#include "qt_application.h"
 
 #include <utility>
 
@@ -11,23 +11,23 @@
 
 namespace javelin::ui {
 
-Application::Application(int& argc, char* argv[], RenderSettings settings)
+QtApplication::QtApplication(int& argc, char* argv[], RenderSettings settings)
     : QApplication(argc, argv),
       _application(std::move(settings)),
       _settingsModel(_application.settings()),
       _viewport(_application.renderer()) {
     connect(&_settingsModel, &RenderSettingsModel::settingsChanged,
-        this, &Application::handleSettingsChanged);
+        this, &QtApplication::handleSettingsChanged);
     connect(&_viewport, &Viewport::renderingFinished,
-        this, &Application::renderStateChanged);
+        this, &QtApplication::renderStateChanged);
 }
 
-Application::~Application() {
+QtApplication::~QtApplication() {
     _viewport.stopListening();
     _application.renderer().stop();
 }
 
-int Application::run() {
+int QtApplication::run() {
     if (!_application.initialize())
         return 1;
 
@@ -41,26 +41,29 @@ int Application::run() {
     _engine.loadFromModule("javelin_ui", "ViewportPanel");
     if (_engine.rootObjects().size() != 2)
         return 1;
+    _engine.loadFromModule("javelin_ui", "PlotExample");
+    if (_engine.rootObjects().size() != 3)
+        return 1;
 
     startRender();
     return exec();
 }
 
-void Application::startRender() {
+void QtApplication::startRender() {
     _viewport.stopListening();
     _application.startRender();
     emit renderStateChanged();
     _viewport.startListening();
 }
 
-void Application::pauseRender() {
+void QtApplication::pauseRender() {
     if (!running() || paused())
         return;
     _application.renderer().pause();
     emit renderStateChanged();
 }
 
-void Application::resumeRender() {
+void QtApplication::resumeRender() {
     if (!paused())
         return;
     _viewport.stopListening();
@@ -69,7 +72,7 @@ void Application::resumeRender() {
     emit renderStateChanged();
 }
 
-void Application::handleSettingsChanged() {
+void QtApplication::handleSettingsChanged() {
     _application.handleSettingsChanged();
     emit renderStateChanged();
 }
