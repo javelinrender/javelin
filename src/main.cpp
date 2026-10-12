@@ -3,10 +3,11 @@
 // information.
 
 #include <iostream>
+#include <print>
 #include <string_view>
 
 #include "render_settings.h"
-#include "ui/application.h"
+#include "ui/qt_application.h"
 
 namespace {
 
@@ -22,11 +23,14 @@ int main(int argc, char* argv[]) {
     for (int index = 1; index < argc; ++index) {
         const std::string_view argument = argv[index];
         if (isHelpArgument(argument)) {
-            std::cout << "Usage: javelin [render settings]\n\n" << javelin::renderSettingsHelp();
+            std::print(std::cout, "Usage: javelin [render settings]\n\n{}",
+                javelin::renderSettingsHelp(options));
             return 0;
         }
-        if (!argument.starts_with("--")) {
-            std::println(std::cerr, "Unexpected argument: {}", argument);
+        const std::optional<std::string_view> name =
+            javelin::findCliParameter(options, argument);
+        if (!name) {
+            std::println(std::cerr, "Unknown command-line option: {}", argument);
             return 1;
         }
         if (++index == argc) {
@@ -35,12 +39,12 @@ int main(int argc, char* argv[]) {
         }
 
         if (const auto error = javelin::setParameterValue(
-                options, argument.substr(2), argv[index])) {
+                options, *name, argv[index])) {
             std::println(std::cerr, "{}", *error);
             return 1;
         }
     }
 
-    javelin::ui::Application application(argc, argv, options);
+    javelin::ui::QtApplication application(argc, argv, options);
     return application.run();
 }

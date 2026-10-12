@@ -41,9 +41,6 @@ int QtApplication::run() {
     _engine.loadFromModule("javelin_ui", "ViewportPanel");
     if (_engine.rootObjects().size() != 2)
         return 1;
-    _engine.loadFromModule("javelin_ui", "PlotExample");
-    if (_engine.rootObjects().size() != 3)
-        return 1;
 
     startRender();
     return exec();
