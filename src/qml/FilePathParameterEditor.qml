@@ -28,7 +28,7 @@ RowLayout {
         id: fileDialog
         title: "Select " + editor.parameter.label
         fileMode: FileDialog.OpenFile
-        nameFilters: editor.parameter.nameFilters
+        nameFilters: editor.parameter.name_filters
         onAccepted: editor.settings.setValue(editor.parameter.name, selectedFile)
     }
 }

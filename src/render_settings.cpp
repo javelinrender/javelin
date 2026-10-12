@@ -5,14 +5,24 @@
 #include "render_settings.h"
 
 #include <charconv>
-#include <cctype>
 #include <filesystem>
 #include <format>
+#include <type_traits>
 #include <utility>
 
 namespace javelin {
 
 namespace {
+
+std::string cliOptionName(const CliOption& option) {
+    static_assert(
+        std::is_same_v<CliOption, std::variant<char, std::string_view>>,
+        "All types must be handled here");
+    if (const char* shortName = std::get_if<char>(&option))
+        return std::format("-{}", *shortName);
+    else
+        return std::format("--{}", std::get<std::string_view>(option));
+}
 
 template<typename Enum>
 std::optional<std::string> setValue(
@@ -162,7 +172,7 @@ std::optional<std::string> setParameterValue(
     std::optional<std::string> result;
     bool found = false;
 
-    candidate.forEachParameter([&](auto& parameter) {
+    candidate.forEachLeafParameter([&](auto& parameter) {
         if (parameter.name == name) {
             found = true;
             result = setValue(parameter, value);
@@ -184,20 +194,43 @@ std::optional<std::string> setParameterValue(
 
 std::vector<std::string> validateRenderSettings(const RenderSettings& options) {
     std::vector<std::string> errors;
-    options.forEachParameter([&](const auto& parameter) {
+    options.forEachLeafParameter([&](const auto& parameter) {
         if (auto error = validate(parameter))
             errors.push_back(std::move(*error));
     });
     return errors;
 }
 
-std::string renderSettingsHelp() {
+std::optional<std::string_view> findCliParameter(
+        const RenderSettings& options,
+        std::string_view argument) {
+    std::optional<std::string_view> name;
+    options.forEachLeafParameter([&](const auto& parameter) {
+        for (const CliOption& option : parameter.cli) {
+            if (cliOptionName(option) == argument)
+                name = parameter.name;
+        }
+    });
+    return name;
+}
+
+std::string renderSettingsHelp(const RenderSettings& options) {
     std::string help = "Render settings:\n";
-    RenderSettings{}.forEachParameter([&](const auto& parameter) {
-        help += std::format(
-            "  --{} <value>\n      {}", parameter.name, parameter.label);
-        appendHelpDetails(help, parameter);
-        help += '\n';
+    options.forEachLeafParameter([&](const auto& parameter) {
+        if (parameter.cli.empty())
+            return;
+        std::string aliases;
+        for (const CliOption& option : parameter.cli) {
+            if (!aliases.empty())
+                aliases += ", ";
+            aliases += cliOptionName(option);
+        }
+        help += std::format("  {} <value>\n", aliases);
+        std::string details(
+            parameter.help.empty() ? parameter.label : parameter.help);
+        appendHelpDetails(details, parameter);
+        if (!details.empty())
+            help += std::format("      {}\n", details);
     });
     return help;
 }

@@ -21,7 +21,9 @@ QString toQString(const std::string_view value) {
 }
 
 template<typename Enum>
-QVariantMap parameterMap(const EnumParameter<Enum>& parameter) {
+QVariantMap parameterMap(
+        const EnumParameter<Enum>& parameter,
+        const RenderSettings& settings) {
     QVariantList choices;
     QString selectedKey;
 
@@ -38,17 +40,21 @@ QVariantMap parameterMap(const EnumParameter<Enum>& parameter) {
         {"name", toQString(parameter.name)},
         {"label", toQString(parameter.label)},
         {"type", "enum"},
+        {"visible", parameter.visible(settings)},
         {"value", selectedKey},
         {"choices", choices},
     };
 }
 
 template<typename Integer>
-QVariantMap parameterMap(const IntegerParameter<Integer>& parameter) {
+QVariantMap parameterMap(
+        const IntegerParameter<Integer>& parameter,
+        const RenderSettings& settings) {
     return {
         {"name", toQString(parameter.name)},
         {"label", toQString(parameter.label)},
         {"type", "integer"},
+        {"visible", parameter.visible(settings)},
         {"value", parameter.value},
         {"minimum", parameter.min.value_or(std::numeric_limits<Integer>::lowest())},
         {"maximum", parameter.max.value_or(std::numeric_limits<Integer>::max())},
@@ -56,16 +62,21 @@ QVariantMap parameterMap(const IntegerParameter<Integer>& parameter) {
     };
 }
 
-QVariantMap parameterMap(const BoolParameter& parameter) {
+QVariantMap parameterMap(
+        const BoolParameter& parameter,
+        const RenderSettings& settings) {
     return {
         {"name", toQString(parameter.name)},
         {"label", toQString(parameter.label)},
         {"type", "bool"},
+        {"visible", parameter.visible(settings)},
         {"value", parameter.value},
     };
 }
 
-QVariantMap parameterMap(const FilePathParameter& parameter) {
+QVariantMap parameterMap(
+        const FilePathParameter& parameter,
+        const RenderSettings& settings) {
     QStringList filters;
     for (const std::string_view extension : parameter.extensions)
         filters.append(QStringLiteral("*%1").arg(toQString(extension)));
@@ -78,17 +89,35 @@ QVariantMap parameterMap(const FilePathParameter& parameter) {
         {"name", toQString(parameter.name)},
         {"label", toQString(parameter.label)},
         {"type", "file_path"},
+        {"visible", parameter.visible(settings)},
         {"value", toQString(parameter.value)},
-        {"nameFilters", QStringList{nameFilter}},
+        {"name_filters", QStringList{nameFilter}},
+    };
+}
+
+template<typename Fields>
+QVariantMap parameterMap(
+        const ParameterGroup<Fields>& parameter,
+        const RenderSettings& settings) {
+    QVariantList children;
+    std::apply(
+        [&](const auto&... child) {
+            (children.append(parameterMap(child, settings)), ...);
+        },
+        parameter.parameters());
+    return {
+        {"name", toQString(parameter.name)},
+        {"label", toQString(parameter.label)},
+        {"type", "group"},
+        {"visible", parameter.visible(settings)},
+        {"children", children},
     };
 }
 
 QList<QVariantMap> parameterRows(const RenderSettings& settings) {
     QList<QVariantMap> result;
     settings.forEachParameter([&](const auto& parameter) {
-        QVariantMap row = parameterMap(parameter);
-        row.insert("visible", parameter.visible(settings));
-        result.append(std::move(row));
+        result.append(parameterMap(parameter, settings));
     });
     return result;
 }

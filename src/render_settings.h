@@ -15,6 +15,25 @@
 #include <variant>
 #include <vector>
 
+/// Macro to make the given list of parameters visible to the GUI/CLI.
+#define JAVELIN_REGISTER_PARAMETERS(...) \
+    auto parameters() { \
+        return std::tie(__VA_ARGS__); \
+    } \
+    auto parameters() const { \
+        return std::tie(__VA_ARGS__); \
+    }
+
+/// Macro for metadata present in all parameter types.
+/// @note
+///     We use this macro instead of struct inheritance because inheritance
+///     prevents using designated initializers.
+#define JAVELIN_PARAMETER_METADATA \
+    std::string_view name; \
+    std::string_view label; \
+    std::vector<::javelin::CliOption> cli; \
+    std::string_view help;
+
 namespace javelin {
 
 struct RenderSettings;
@@ -39,10 +58,11 @@ private:
     std::variant<bool, Predicate> condition;
 };
 
+using CliOption = std::variant<char, std::string_view>;
+
 template<typename Enum>
 struct EnumParameter {
-    std::string_view name;
-    std::string_view label;
+    JAVELIN_PARAMETER_METADATA
     Enum value;
 
     struct Choice {
@@ -56,8 +76,7 @@ struct EnumParameter {
 
 template<typename Integer>
 struct IntegerParameter {
-    std::string_view name;
-    std::string_view label;
+    JAVELIN_PARAMETER_METADATA
     Integer value;
     std::optional<Integer> min;
     std::optional<Integer> max;
@@ -66,24 +85,86 @@ struct IntegerParameter {
 };
 
 struct BoolParameter {
-    std::string_view name;
-    std::string_view label;
+    JAVELIN_PARAMETER_METADATA
     bool value;
     ParameterVisibility visible = true;
 };
 
 struct FilePathParameter {
-    std::string_view name;
-    std::string_view label;
+    JAVELIN_PARAMETER_METADATA
     std::string value;
     std::vector<std::string_view> extensions;
     ParameterVisibility visible = true;
 };
 
+template<typename Fields>
+struct ParameterGroup : Fields {
+    std::string_view name;
+    std::string_view label;
+    ParameterVisibility visible = true;
+};
+
+template<typename Parameter, typename Function>
+void forEachLeafParameter(
+        Parameter& parameter,
+        Function&& function) {
+    function(parameter);
+}
+
+template<typename Fields, typename Function>
+void forEachLeafParameter(ParameterGroup<Fields>& group, Function&& function) {
+    std::apply(
+        [&](auto&... parameter) {
+            (forEachLeafParameter(parameter, function), ...);
+        },
+        group.parameters());
+}
+
+template<typename Fields, typename Function>
+void forEachLeafParameter(
+        const ParameterGroup<Fields>& group,
+        Function&& function) {
+    std::apply(
+        [&](const auto&... parameter) {
+            (forEachLeafParameter(parameter, function), ...);
+        },
+        group.parameters());
+}
+
+struct MutationParameters {
+    BoolParameter newPath{
+        .name = "new_path",
+        .label = "New Path Mutations",
+        .value = true,
+    };
+    BoolParameter lens{
+        .name = "lens",
+        .label = "Lens Perturbations",
+        .value = true,
+    };
+    BoolParameter multiChain{
+        .name = "multi_chain",
+        .label = "Multi-Chain Perturbations",
+        .value = true,
+    };
+    BoolParameter bidirectional{
+        .name = "bidirectional",
+        .label = "Bidirectional Mutations",
+        .value = true,
+    };
+
+    JAVELIN_REGISTER_PARAMETERS(
+        newPath,
+        lens,
+        multiChain,
+        bidirectional)
+};
+
 struct RenderSettings {
     FilePathParameter sceneFile{
-        .name = "scene-file",
+        .name = "scene_file",
         .label = "Scene File",
+        .cli = {'s', "scene"},
         .value = "./media/cornellbox_plane_light.glb",
         .extensions = {".glb"},
     };
@@ -95,6 +176,7 @@ struct RenderSettings {
     EnumParameter<Integrator> integrator{
         .name = "integrator",
         .label = "Integrator",
+        .cli = {"integrator"},
         .value = Integrator::Unidirectional,
         .choices = {
             {Integrator::Unidirectional, "unidirectional", "Unidirectional"},
@@ -104,6 +186,7 @@ struct RenderSettings {
     IntegerParameter<int> width{
         .name = "width",
         .label = "Width",
+        .cli = {'W', "width"},
         .value = 512,
         .min = 1,
         .max = std::nullopt,
@@ -112,14 +195,16 @@ struct RenderSettings {
     IntegerParameter<int> height{
         .name = "height",
         .label = "Height",
+        .cli = {'H', "height"},
         .value = 512,
         .min = 1,
         .max = std::nullopt,
         .step = 1,
     };
     IntegerParameter<int> samplesPerPixel{
-        .name = "samples-per-pixel",
+        .name = "samples_per_pixel",
         .label = "Samples per Pixel",
+        .cli = {'p', "samples"},
         .value = 256,
         .min = 1,
         .max = std::nullopt,
@@ -127,8 +212,9 @@ struct RenderSettings {
     };
 
     IntegerParameter<int> threadPoolSize{
-        .name = "thread-pool-size",
+        .name = "thread_pool_size",
         .label = "Thread Pool Size",
+        .cli = {'j'},
         .value = std::max<int>(1, std::thread::hardware_concurrency()),
         .min = 1,
         .max = std::nullopt,
@@ -140,7 +226,7 @@ struct RenderSettings {
     }
 
     IntegerParameter<int> metropolisMarkovChains{
-        .name = "metropolis-markov-chains",
+        .name = "metropolis_markov_chains",
         .label = "Markov Chains",
         .value = std::max<int>(1, std::thread::hardware_concurrency()),
         .min = 1,
@@ -148,52 +234,21 @@ struct RenderSettings {
         .step = 1,
         .visible = isMetropolis,
     };
-    BoolParameter newPathMutation{
-        .name = "new-path-mutation",
-        .label = "New Path Mutations",
-        .value = true,
-        .visible = isMetropolis,
-    };
-    BoolParameter lensPerturbation{
-        .name = "lens-perturbation",
-        .label = "Lens Perturbations",
-        .value = true,
-        .visible = isMetropolis,
-    };
-    BoolParameter multiChainPerturbation{
-        .name = "multi-chain-perturbation",
-        .label = "Multi-Chain Perturbations",
-        .value = true,
-        .visible = isMetropolis,
-    };
-    BoolParameter bidirectionalMutation{
-        .name = "bidirectional-mutation",
-        .label = "Bidirectional Mutations",
-        .value = true,
+    ParameterGroup<MutationParameters> metropolisMutations{
+        .name = "metropolis_mutations",
+        .label = "Enabled Mutations",
         .visible = isMetropolis,
     };
 
-    auto parameters() {
-        return std::tie(
-            sceneFile,
-            integrator,
-            width,
-            height,
-            samplesPerPixel,
-            threadPoolSize,
-            metropolisMarkovChains,
-            newPathMutation,
-            lensPerturbation,
-            multiChainPerturbation,
-            bidirectionalMutation);
-    }
-    auto parameters() const {
-        return std::apply(
-            [](auto&... parameter) { 
-                return std::tie(std::as_const(parameter)...);
-            },
-            const_cast<RenderSettings&>(*this).parameters());
-    }
+    JAVELIN_REGISTER_PARAMETERS(
+        sceneFile,
+        integrator,
+        width,
+        height,
+        samplesPerPixel,
+        threadPoolSize,
+        metropolisMarkovChains,
+        metropolisMutations)
 
     template<typename Function>
     void forEachParameter(Function&& function) {
@@ -208,6 +263,20 @@ struct RenderSettings {
             [&](const auto&... parameter) { (function(parameter), ...); },
             parameters());
     }
+
+    template<typename Function>
+    void forEachLeafParameter(Function&& function) {
+        forEachParameter([&](auto& parameter) {
+            javelin::forEachLeafParameter(parameter, function);
+        });
+    }
+
+    template<typename Function>
+    void forEachLeafParameter(Function&& function) const {
+        forEachParameter([&](const auto& parameter) {
+            javelin::forEachLeafParameter(parameter, function);
+        });
+    }
 };
 
 /// Applies a value from the CLI, QML, or another text-based interface.
@@ -220,7 +289,12 @@ std::optional<std::string> setParameterValue(
 /// Validates all parameter values against their constraints.
 std::vector<std::string> validateRenderSettings(const RenderSettings& options);
 
-/// Formats parameter help from the same registry used by other frontends.
-std::string renderSettingsHelp();
+/// Resolves an explicit CLI alias, including its leading '-' or '--', to a name.
+/// Parameters with no CLI aliases are not exposed on the command line.
+std::optional<std::string_view> findCliParameter(
+    const RenderSettings& options, std::string_view argument);
+
+/// Formats CLI aliases and help text for exposed parameters only.
+std::string renderSettingsHelp(const RenderSettings& options = {});
 
 } // namespace javelin

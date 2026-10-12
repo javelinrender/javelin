@@ -348,15 +348,18 @@ void PathSpaceMutator::acceptMutation(State&& newState) {
 
 Mutator::Mutator(const MetropolisIntegrator& renderer) : _renderer(renderer) {}
 
-PathSpaceMutator::PathSpaceMutator(const MetropolisIntegrator& renderer) :
-    Mutator(renderer), _mutationDistribution{
-                1.0  * _renderer.getSettings().newPathMutation.value,
-                1.0  * _renderer.getSettings().lensPerturbation.value,
-                1.0  * _renderer.getSettings().multiChainPerturbation.value,
-                1.0  * _renderer.getSettings().bidirectionalMutation.value} {}
+PathSpaceMutator::PathSpaceMutator(const MetropolisIntegrator& renderer)
+        : Mutator(renderer),
+        _mutationDistribution{
+            1.0  * _renderer.getSettings().metropolisMutations.newPath.value,
+            1.0  * _renderer.getSettings().metropolisMutations.lens.value,
+            1.0  * _renderer.getSettings().metropolisMutations.multiChain.value,
+            1.0  * _renderer.getSettings().metropolisMutations.bidirectional.value} {}
 
 MLTProcess::MLTProcess(const MetropolisIntegrator& renderer, int width, int height) 
-        : _renderer(renderer), _mutator(std::make_unique<PathSpaceMutator>(renderer)), _accumulationBuffer(width, height, 3) {}
+        : _renderer(renderer),
+        _mutator(std::make_unique<PathSpaceMutator>(renderer)),
+        _accumulationBuffer(width, height, 3) {}
 
 void MLTProcess::accumulate(
         const Scene& scene, const int numMutations, std::stop_token stopToken) {
@@ -418,13 +421,13 @@ void MLTProcess::reset() {
 
 MetropolisIntegrator::MetropolisIntegrator(const RenderSettings& settings)
         : _settings{settings} {
-    if (_settings.newPathMutation.value)
+    if (_settings.metropolisMutations.newPath.value)
         std::println("New path mutations enabled");
-    if (_settings.lensPerturbation.value)
+    if (_settings.metropolisMutations.lens.value)
         std::println("Lens perturbations enabled");
-    if (_settings.multiChainPerturbation.value) 
+    if (_settings.metropolisMutations.multiChain.value) 
         std::println("Multi-chain perturbations enabled");
-    if (_settings.bidirectionalMutation.value)  
+    if (_settings.metropolisMutations.bidirectional.value)  
         std::println("Bidirectional mutations enabled");
     for (int i = 0; i < _settings.metropolisMarkovChains.value; ++i) {
         _processes.emplace_back(*this, _settings.width.value, _settings.height.value);

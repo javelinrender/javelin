@@ -14,6 +14,7 @@
 
 namespace javelin::ui {
 
+/// Bridge between the Qt application and `RenderSettings`.
 class RenderSettingsModel : public QAbstractListModel {
     Q_OBJECT
 
@@ -22,10 +23,14 @@ public:
         ParameterRole = Qt::UserRole + 1,
     };
 
-    explicit RenderSettingsModel(RenderSettings& options, QObject* parent = nullptr);
+    explicit RenderSettingsModel(
+        RenderSettings& options,
+        QObject* parent = nullptr);
 
     int rowCount(const QModelIndex& parent = {}) const override;
-    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
+    QVariant data(
+        const QModelIndex& index,
+        int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
     Q_INVOKABLE bool setValue(const QString& name, const QVariant& value);
