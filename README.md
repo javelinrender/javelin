@@ -60,3 +60,12 @@ Note that the Metropolis Light Transport shines best on scenes with difficult li
 ## Attribution
 
 The scenes `media/room_close.glb` and `media/room_far.glb` use select assets from the [Living room Asset Pack](https://sketchfab.com/3d-models/living-room-asset-pack-eafcacc7dc8643d68b435b177d049567) by [shadowdraak](https://sketchfab.com/shadowdraak), licensed under [Creative Commons Attribution (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
+
+
+The scene `media/shaderball.glb` uses the [Standard Shader Ball](https://github.com/usd-wg/assets/tree/main/full_assets/StandardShaderBall) by the following contributors,
+
+- Geometry and textures: Chris Rydalch,
+- Specification and validation: André Mazzone,
+- Original scene, inspiration and consultation: Thomas Anagnostou,
+
+licensed under [Creative Commons Attribution (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
