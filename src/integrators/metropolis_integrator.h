@@ -4,17 +4,22 @@
 
 #pragma once
 
+#include <memory>
 #include <random>
+#include <vector>
 
 #include "image.h"
 #include "scene.h"
-#include "threadpool.h"
-#include "renderer.h"
+#include "thread_pool.h"
+#include "integrator.h"
+#include "render_settings.h"
 #include "path.h"
 
-class MLT;
+namespace javelin::integrators {
 
-namespace Metropolis {
+class MetropolisIntegrator;
+
+namespace metropolis {
 
 struct State {
     Vec2 pixel;
@@ -27,22 +32,22 @@ struct MutationInfo {
     bool isNewPath;
 };
 
-} // namespace Metropolis
+} // namespace metropolis
 
 class Mutator {
 public:
-    explicit Mutator(const MLT& renderer);
+    explicit Mutator(const MetropolisIntegrator& renderer);
     virtual ~Mutator() = default;
-    virtual std::optional<Metropolis::MutationInfo>
+    virtual std::optional<metropolis::MutationInfo>
     computeRandomMutation(const Scene& scene) = 0;
-    virtual void initialize(const Scene& scene) = 0;
-    virtual void acceptMutation(Metropolis::State&& newState) {
+    virtual void initialize(const Scene& scene, std::stop_token stopToken) = 0;
+    virtual void acceptMutation(metropolis::State&& newState) {
         _currentState = std::move(newState);
     };
-    const Metropolis::State& getCurrentState() { return *_currentState; };
+    const metropolis::State& getCurrentState() { return *_currentState; };
 protected:
-    const MLT& _renderer;
-    std::optional<Metropolis::State> _currentState;
+    const MetropolisIntegrator& _renderer;
+    std::optional<metropolis::State> _currentState;
 };
 
 class PathSpaceMutator : public Mutator {
@@ -53,13 +58,13 @@ public:
         MultiChain = 2,
         Bidirectional = 3
     };
-    explicit PathSpaceMutator(const MLT& renderer);
-    virtual std::optional<Metropolis::MutationInfo>
+    explicit PathSpaceMutator(const MetropolisIntegrator& renderer);
+    virtual std::optional<metropolis::MutationInfo>
     computeRandomMutation(const Scene& scene) override;
 
-    virtual void initialize(const Scene& scene) override;
+    virtual void initialize(const Scene& scene, std::stop_token stopToken) override;
 
-    virtual void acceptMutation(Metropolis::State&& newState) override;
+    virtual void acceptMutation(metropolis::State&& newState) override;
 private:
     // Bidirectional mutations involve taking the current light path,
     // deleting a subpath and replacing it with a newly generated subpath.
@@ -67,7 +72,7 @@ private:
     // Guibas since we currently only generate paths from the eye rather than
     // bidirectionally. Still, the spirit of this mutation should remain the
     // same.
-    std::optional<Metropolis::MutationInfo>
+    std::optional<metropolis::MutationInfo>
     bidirectionalMutation(const Scene& scene);
 
     // Eye path perturbations involve slightly adjusting the outgoing direction
@@ -75,12 +80,12 @@ private:
     // as the original path, and then connecting back to the original path.
     // Multichain perturbations are the same with the exception that diffuse
     // bounces are also slightly perturbed reconnecting
-    std::optional<Metropolis::MutationInfo>
+    std::optional<metropolis::MutationInfo>
     eyePathPerturbation(const Scene& scene, bool multiChain);
 
     // New path mutations generate a new path independent of the current path
     // based on Russian Roulette.
-    std::optional<Metropolis::MutationInfo>
+    std::optional<metropolis::MutationInfo>
     computeNewPathMutation(const Scene& scene);
 
     std::optional<Path> _currentPath;
@@ -90,14 +95,14 @@ private:
 
 class MLTProcess {
 public:
-    MLTProcess(const MLT& renderer, int width, int height);
+    MLTProcess(const MetropolisIntegrator& renderer, int width, int height);
 
     MLTProcess(const MLTProcess&) = delete;
     MLTProcess& operator=(const MLTProcess&) = delete;
     MLTProcess(MLTProcess&&) = default;
     MLTProcess& operator=(MLTProcess&&) = delete;
 
-    void accumulate(const Scene& scene, int numMutations);
+    void accumulate(const Scene& scene, int numMutations, std::stop_token stopToken);
     const Image& accumulationBuffer() const { return _accumulationBuffer; }
     float accumulatedLuminance() const { return _accumulatedLuminance; }
     int numNewPathMutations() const { return _numNewPathMutations; }
@@ -105,7 +110,7 @@ public:
     void reset();
 
 private:
-    const MLT& _renderer;
+    const MetropolisIntegrator& _renderer;
     std::unique_ptr<Mutator> _mutator;
     Image _accumulationBuffer;
     float _accumulatedLuminance = 0.0f;
@@ -113,42 +118,36 @@ private:
     float _averageSamplesPerPixel = 0.0f;
 };
 
-class MLT : public IRenderer {
+class MetropolisIntegrator final : public Integrator {
 public:
-    struct EnabledMutations {
-        bool newPathMutation = false;
-        bool lensPerturbation = false;
-        bool multiChainPerturbation = false;
-        bool bidirectionalMutation = false;
-    };
+    explicit MetropolisIntegrator(const RenderSettings& settings);
 
-    MLT(const EnabledMutations& config, int width, int height, int numProcesses = 1);
+    MetropolisIntegrator(const MetropolisIntegrator&) = delete;
+    MetropolisIntegrator& operator=(const MetropolisIntegrator&) = delete;
+    MetropolisIntegrator(MetropolisIntegrator&&) = delete;
+    MetropolisIntegrator& operator=(MetropolisIntegrator&&) = delete;
 
-    MLT(const MLT&) = delete;
-    MLT& operator=(const MLT&) = delete;
-    MLT(MLT&&) = delete;
-    MLT& operator=(MLT&&) = delete;
-
-    virtual void accumulate(
+    std::unique_ptr<Result> accumulate(
         const Scene& scene,
-        int numSamples,
-        ThreadPool* pool = nullptr) override;
-    virtual void updateFrameBuffer(Image& frameBuffer) const override; 
-    virtual int numSamplesPerPixel() const override { return _averageSamplesPerPixel; }
-    virtual void reset() override;
+        ThreadPool* pool,
+        int sampleCount,
+        std::stop_token stopToken) override;
 
-    const EnabledMutations& getConfig() const { return _config; }
 
-    int getWidth() const { return _width; }
-    int getHeight() const { return _height; }
+    void reset();
+
+    const RenderSettings& getSettings() const { return _settings; }
+
+    int getWidth() const { return _settings.width.value; }
+    int getHeight() const { return _settings.height.value; }
 
 private:
     /// Compute the scaling factor needed to make the histogram approximate the image.
     float computeScaleFactor() const;
 
-    EnabledMutations _config;
-    int _width;
-    int _height;
+    RenderSettings _settings;
     std::vector<MLTProcess> _processes;
     int _averageSamplesPerPixel = 0;
 };
+
+} // namespace javelin::integrators

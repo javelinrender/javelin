@@ -3,3 +3,5 @@ cmake-build-debug
 cmake-build-release
 cmake-build-relwithdebinfo
 .vscode
+.zed
+CMakeUserPresets.json

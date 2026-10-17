@@ -6,10 +6,11 @@
 
 #include <cassert>
 #include <functional>
+#include <iostream>
 #include <print>
 #include <numeric>
 
-#include "tracy/Tracy.hpp"
+#include "profiling.h"
 #include "fastgltf/core.hpp"
 #include "fastgltf/tools.hpp"
 #include "fastgltf/glm_element_traits.hpp"
@@ -78,16 +79,16 @@ std::optional<Scene::HitInfo> Scene::intersect(
 }
 
 bool Scene::loadGltf(const std::filesystem::path& filePath) {
-    ZoneScoped;
-    ZoneTextF("filePath=%s", filePath.string().c_str());
+    JAVELIN_ZONE_SCOPED;
+    JAVELIN_ZONE_TEXTF("filePath=%s", filePath.string().c_str());
 
-    std::println("Loading GLTF: {}", filePath.string());
+    std::println(std::cout, "Loading GLTF: {}", filePath.string());
 
     fastgltf::Expected<fastgltf::GltfDataBuffer> dataBuffer =
         fastgltf::GltfDataBuffer::FromPath(filePath);
     if (!dataBuffer) {
         std::println(
-            stderr, "Failed to load GLTF: error={}",
+            std::cerr, "Failed to load GLTF: error={}",
             fastgltf::to_underlying(dataBuffer.error()));
         return false;
     }
@@ -104,10 +105,17 @@ bool Scene::loadGltf(const std::filesystem::path& filePath) {
         dataBuffer.get(), filePath.parent_path(), options);
     if (!asset) {
         std::println(
-            stderr, "Failed to load GLTF: error={}",
+            std::cerr, "Failed to load GLTF: error={}",
             fastgltf::to_underlying(asset.error()));
         return false;
     }
+
+    // In case we are loading a new scene we need to clear the existing one.
+    meshes.clear();
+    textures.clear();
+    images.clear();
+    lights.clear();
+    materials.clear();
 
     // Load images
     // Adapted from example:
@@ -189,7 +197,7 @@ bool Scene::loadGltf(const std::filesystem::path& filePath) {
         // Index of refraction
         newMaterial.ior = material.ior;
 
-        std::println("Loaded material name={}", material.name);
+        std::println(std::cout, "Loaded material name={}", material.name);
     }
     // Load lights (just point lights for now)
     for (const fastgltf::Light& light : asset->lights) {
@@ -328,7 +336,7 @@ bool Scene::loadGltf(const std::filesystem::path& filePath) {
                         .meshIdx = meshes.size(),
                         .primitiveIdx = newMesh.primitives.size()}));
                 std::println(
-                    "Added mesh name={} primitiveIdx={} as a light",
+                    std::cout, "Added mesh name={} primitiveIdx={} as a light",
                     newMesh.name, meshLight.primitiveIdx);
             }
 
@@ -346,7 +354,7 @@ bool Scene::loadGltf(const std::filesystem::path& filePath) {
         }
 
         meshes.emplace_back(std::move(newMesh));
-        std::println("Loaded mesh name={}", mesh.name);
+        std::println(std::cout, "Loaded mesh name={}", mesh.name);
     }
 
     return true;

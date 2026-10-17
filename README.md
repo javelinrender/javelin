@@ -1,6 +1,4 @@
-# Metropolis Light Transport Implementation
-
-This project was created by Maxwell Hunt & [Alexander Kaminsky](https://github.com/kaminskyalexander/)
+# Javelin
 
 <table>
     <tr>
@@ -15,72 +13,43 @@ This project was created by Maxwell Hunt & [Alexander Kaminsky](https://github.c
 
 ## Overview
 
-In this project we implement a modified version of Veach and Guibas' original 1997 Metropolis Light Transport algorithm. Our program allows for loading scenes from `.glb` files and rendering them either using a unidirectional path tracer or our MLT algorithm. Use the `WSAD` keys to move around and press `I` to save a screen-shot.
-
-**Usage:** `MLT [--help] [--jobs NUM_JOBS] [--use-path-tracer] [--mutations MUTATIONS] glb-file`
-
-**Positional arguments:**
-- `glb-file`                     The .glb file to load into the scene. [required]
-
-**Optional arguments:**
-- `-h`, `--help`                 Shows help message and exits.
-- `-j`, `--jobs` `NUM_JOBS`
-   The size of the thread pool. By default, the hardware concurrency is used. A value less than 2 disables the thread pool.
-- `--pt`, `--use-path-tracer`    Use regular path tracing instead of MLT.
-- `-m`, `--mutations` `MUTATIONS`
-  Specifies a custom set of enabled mutators for MLT. The set should be passed 
-  as a comma-separated list of the enabled mutators from the set
-  {newPathMutation, lensPerturbation, multiChainPerturbation,
-  bidirectionalMutation}, with no spaces. The full name does not need to be
-  provided; the closest match will be used.
-  
-
-**Example usage:** `MLT ../media/room_far.glb -m new,lens -j 8`
+In this project we implement a modified version of Veach and Guibas' original 1997 Metropolis Light Transport algorithm. The renderer loads scenes from `.glb` files and supports both a unidirectional path tracer and the MLT algorithm. A Qt-based user interface will provide scene and renderer controls.
 
 ## Building
 
-This project requires CMake version 3.25 and a compiler with support for C++23.
+This project requires Qt 6.10, Conan 2.25, CMake version 3.25, and a compiler with support for C++23.
+
 ```
-mkdir build
-cd build
-cmake ..
-cmake --build . --config Release
+conan install .
+cmake --preset conan-release
+cmake --build --preset conan-release
 ```
 
-> [!NOTE]
-> The `--config` argument only works with multi-configuration generators (for example, Visual Studio Generators, Ninja Multi-Config).
-> If the generator isn't a multi-configuration one (for example, Unix Makefiles, Ninja), then build type is set via the `CMAKE_BUILD_TYPE` CMake variable.
-> ```
-> cmake -DCMAKE_BUILD_TYPE=Release ..
-> cmake --build .
-> ```
-
-To build without Wayland on Linux, use:
+To enable debugging symbols:
 ```
-cmake -MLT_ENABLE_WAYLAND=OFF ..
+conan install . -s "&:build_type=RelWithDebInfo"
+cmake --preset conan-relwithdebinfo
+cmake --build --preset conan-relwithdebinfo
 ```
 
 ## Profiling with Tracy
 
 ![Profiling with Tracy](tracy.png)
 
-Our code has been instrumented with the help of
-[Tracy](https://github.com/wolfpld/tracy) to assist in identifying performance
-bottlenecks.
+Our code has been instrumented with the help of [Tracy](https://github.com/wolfpld/tracy) to assist in identifying performance bottlenecks.
 
-To enable profiling in the build, in the `build` directory, run:
-
+To enable Tracy profiling, run:
 ```
-cmake -DMLT_ENABLE_TRACY=ON ..
+conan install . -s "&:build_type=RelWithDebInfo" -o "&:enable_profiling=True"
+cmake --fresh --preset conan-relwithdebinfo
+cmake --build --preset conan-relwithdebinfo
 ```
 
 Once built, run the application as usual. Profiling of instrumented code will be
 enabled automatially. In order to profile using sampling, the application needs
 to be run with administrative privileges.
 
-Finally, install
-[Tracy Profiler 0.12.2](https://github.com/wolfpld/tracy/releases/tag/v0.12.2)
-and run it to connect to the application.
+Finally, install [Tracy Profiler 0.13.1](https://github.com/wolfpld/tracy/releases/tag/v0.13.1) and run it to connect to the application.
 
 ## Implementation
 We use a bounding volume heirarchy with the surface area heuristic to speed up ray-triangle intersections. Our code is also multithreaded by default (use `-j` option to set the number of threads used). Implementing Metropolis Light Transport demanded a deep and thourough understanding of the theoretical background and the implementation details which drive the algorithm. The paper that this project was based on is given here: [Veach & Guibas](https://graphics.stanford.edu/papers/metro/metro.pdf).
@@ -90,7 +59,4 @@ Note that the Metropolis Light Transport shines best on scenes with difficult li
 
 ## Attribution
 
-The scenes `media/room_close.glb` and `media/room_far.glb` use select assets
-from the [Living room Asset Pack](https://sketchfab.com/3d-models/living-room-asset-pack-eafcacc7dc8643d68b435b177d049567)
-by [shadowdraak](https://sketchfab.com/shadowdraak), licensed under
-[Creative Commons Attribution (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
+The scenes `media/room_close.glb` and `media/room_far.glb` use select assets from the [Living room Asset Pack](https://sketchfab.com/3d-models/living-room-asset-pack-eafcacc7dc8643d68b435b177d049567) by [shadowdraak](https://sketchfab.com/shadowdraak), licensed under [Creative Commons Attribution (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).

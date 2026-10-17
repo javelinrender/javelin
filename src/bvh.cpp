@@ -4,11 +4,10 @@
 
 #include "bvh.h"
 
-#include "tracy/Tracy.hpp"
-
 #include "aabb.h"
 #include "aabb4.h"
 #include "mesh.h"
+#include "profiling.h"
 #include "types.h"
 
 namespace {
@@ -158,7 +157,7 @@ private:
 
 
 BVH::BVH(const Mesh& mesh, const std::size_t startIdx, const std::size_t count) {
-    ZoneScopedN("Building BVH");
+    JAVELIN_ZONE_SCOPED_N("Building BVH");
     std::vector<Vec3> triangleCenters;
     triangles.reserve(count);
     triangleCenters.reserve(count);
