@@ -82,7 +82,7 @@ void Viewport::startListening(bool reset) {
         while (!token.stop_requested()) {
             std::unique_ptr<RenderUpdate> update =
                 _renderer.waitForUpdate(sampleCount, token);
-            if (!update || token.stop_requested())
+            if (!update)
                 break;
             sampleCount = update->samplesPerPixel;
             update->image.applyCorrection();
