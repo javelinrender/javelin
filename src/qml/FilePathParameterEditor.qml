@@ -15,7 +15,7 @@ RowLayout {
         selectByMouse: true
         onEditingFinished: {
             if (!editor.settings.setValue(editor.parameter.name, text))
-                text = editor.parameter.value
+                text = Qt.binding(function() { return editor.parameter.value })
         }
     }
 
