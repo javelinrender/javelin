@@ -16,7 +16,8 @@ class JavelinConan(ConanFile):
     def requirements(self):
         self.requires("fastgltf/0.9.0")
         self.requires("glm/1.0.3")
-        self.requires("tracy/0.13.1")
+        if self.options.enable_profiling:
+            self.requires("tracy/0.13.1")
 
     def layout(self):
         cmake_layout(self, src_folder=".", build_folder="build")
