@@ -7,7 +7,10 @@
 #include <random>
 #include <print>
 
+#include "material.h"
 #include "scene.h"
+
+#include "materials/material.h"
 
 namespace {
 
@@ -107,9 +110,13 @@ std::optional<Ray> Path::addBounce(
     if (terminationProbability && PCG32::rand() < *terminationProbability)
         return std::nullopt;
 
-    const auto [newRay, bounceType] = material.sampleDirection(
-        -inRay.d, last());
-    last().bounceType = bounceType;
+    // const auto [newRay, bounceType] = material.sampleDirection(
+    //     -inRay.d, last());
+    // last().bounceType = bounceType;
+    const Ray newRay = Ray(
+        last().position + Epsilon * last().geometricNormal,
+        javelin::materials::samplePdf(scene, scene.pdf, -inRay.d, last()));
+    last().bounceType = Path::Vertex::BounceType::Diffuse;
     return newRay;
 }
 
@@ -166,7 +173,11 @@ EvaluationResult evaluateImplicit(
     constexpr float ContinuationProbability =
         1.0f - Path::TerminationProbability;
 
-    result.radiance = material.expectedContribution(v2, v1.position - v2.position);
+    result.radiance = javelin::materials::evaluateBsdfWeight(
+        scene, scene.bsdf, scene.pdf,
+        normalize(v1.position - v2.position),
+        normalize(v3.position - v2.position),
+        v2);
     result.russianRouletteRadiance = result.radiance / ContinuationProbability;
 
     return result;
