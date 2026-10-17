@@ -14,6 +14,7 @@
 #include "mesh.h"
 #include "texture.h"
 #include "types.h"
+#include "materials/material.h"
 
 struct Camera {
     Camera(
@@ -69,6 +70,11 @@ public:
     std::vector<Mesh> meshes;
     std::vector<Image> images;
     std::vector<Light> lights;
+
+    const javelin::materials::bsdf::LambertianDiffuse bsdf{
+        .baseColorFactor = Vec4(.5,.5,.5,1),
+    };
+    const javelin::materials::pdf::CosineWeighted pdf;
 
 private:
     static inline const MaterialData DefaultMaterialData{};

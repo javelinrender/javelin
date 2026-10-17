@@ -18,6 +18,7 @@ endif()
 set(SRC_FILES
     src/integrators/unidirectional_integrator.cpp
     src/integrators/metropolis_integrator.cpp
+    src/materials/material.cpp
     src/ui/qt_application.cpp
     src/ui/render_settings_model.cpp
     src/ui/viewport.cpp
