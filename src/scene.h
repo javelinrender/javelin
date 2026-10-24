@@ -75,10 +75,18 @@ public:
     std::vector<Image> images;
     std::vector<Light> lights;
 
-    const javelin::materials::bsdf::LambertianDiffuse bsdf{
-        .baseColorFactor = Vec4(.5,.5,.5,1),
+    // const javelin::materials::bsdf::LambertianDiffuse bsdf{
+    //     .baseColorFactor = Vec4(.5,.5,.5,1),
+    // };
+    const javelin::materials::bsdf::DisneyMetal bsdf{
+        .baseColorFactor = Vec4(.8,.8,.8,1),
+        .roughnessFactor = 0.6f
     };
-    const javelin::materials::pdf::CosineWeighted pdf;
+
+    // const javelin::materials::pdf::CosineWeighted pdf{};
+    const javelin::materials::pdf::GGXVNDF pdf{
+        .roughnessFactor = 0.6f
+    };
 
 private:
     static inline const MaterialData DefaultMaterialData{};

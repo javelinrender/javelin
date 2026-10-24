@@ -165,7 +165,7 @@ struct RenderSettings {
         .name = "scene_file",
         .label = "Scene File",
         .cli = {'s', "scene"},
-        .value = "./media/cornellbox_plane_light.glb",
+        .value = "./media/shaderball.glb",
         .extensions = {".glb"},
     };
 
