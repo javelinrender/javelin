@@ -37,7 +37,7 @@ struct DisneyMetal {
     float roughnessFactor = 1.0f;
     std::optional<std::size_t> roughnessTextureIdx;
 
-    float anisotropyFactor = 1.0f;
+    float anisotropyFactor = 0.0f;
     std::optional<std::size_t> anisotropyTextureIdx;
 };
 
@@ -49,6 +49,14 @@ struct Uniform {};
 struct Delta {};
 struct CosineWeighted {};
 
+struct GGXVNDF {
+    float roughnessFactor = 1.0f;
+    std::optional<std::size_t> roughnessTextureIdx;
+
+    float anisotropyFactor = 0.0f;
+    std::optional<std::size_t> anisotropyTextureIdx;
+};
+
 };
 
 using BSDF = std::variant<
@@ -59,7 +67,8 @@ using BSDF = std::variant<
 using PDF = std::variant<
     pdf::Uniform,
     pdf::Delta,
-    pdf::CosineWeighted>;
+    pdf::CosineWeighted,
+    pdf::GGXVNDF>;
 
 template<typename T>
 Vec3 evaluateBsdf(
@@ -123,6 +132,21 @@ float evaluatePdf<pdf::CosineWeighted>(
         const Path::Vertex& vertex);
 
 template<>
+Vec3 samplePdf<pdf::GGXVNDF>(
+        const Scene& scene,
+        const pdf::GGXVNDF& pdf,
+        const Vec3& inDir,
+        const Path::Vertex& vertex);
+
+template<>
+float evaluatePdf<pdf::GGXVNDF>(
+        const Scene& scene,
+        const pdf::GGXVNDF& pdf,
+        const Vec3& inDir,
+        const Vec3& outDir,
+        const Path::Vertex& vertex);
+
+template<>
 Vec3 evaluateBsdf<bsdf::DisneyDiffuse>(
         const Scene& scene,
         const bsdf::DisneyDiffuse& bsdf,
@@ -171,9 +195,12 @@ Vec3 evaluateBsdfWeight(
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex) {
-    return std::max(0.0f, dot(vertex.normal, outDir)) * (
-        evaluateBsdf(scene, bsdf, inDir, outDir, vertex) /
-        evaluatePdf(scene, pdf, inDir, outDir, vertex));
+    // Directions the pdf can't produce (e.g. below the surface) carry no energy.
+    const float pdfValue = evaluatePdf(scene, pdf, inDir, outDir, vertex);
+    if (!(pdfValue > 0.0f))
+        return Vec3(0.0f);
+    // The Disney BSDFs already include the |n . outDir| factor.
+    return evaluateBsdf(scene, bsdf, inDir, outDir, vertex) / pdfValue;
 }
 
 template<>
@@ -181,6 +208,15 @@ Vec3 evaluateBsdfWeight(
         const Scene& scene,
         const bsdf::LambertianDiffuse& bsdf,
         const pdf::CosineWeighted& pdf,
+        const Vec3& inDir,
+        const Vec3& outDir,
+        const Path::Vertex& vertex);
+
+template<>
+Vec3 evaluateBsdfWeight(
+        const Scene& scene,
+        const bsdf::DisneyMetal& bsdf,
+        const pdf::GGXVNDF& pdf,
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex);
