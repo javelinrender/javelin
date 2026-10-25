@@ -162,11 +162,13 @@ std::optional<MutationInfo> PathSpaceMutator::bidirectionalMutation(
         Path::Vertex& current = _potentialPath.last();
         const Vec3 inDir = current.position - _potentialPath.vertex(s-1).position;
         const Material& material = scene.getMaterial(current.materialIdx);
-        ray = Ray(
-            current.position + Epsilon * current.geometricNormal,
-            javelin::materials::samplePdf(
-                scene, material.surfacePdf(), -inDir, current));
-        current.bounceType = Path::Vertex::BounceType::Diffuse;
+        const Vec3 newDirection = javelin::materials::samplePdf(
+            scene, material.surfacePdf(), -inDir, current);
+        if (length2(newDirection) == 0.0f)
+            return std::nullopt;
+        ray = Ray(current.offsetPosition(newDirection), newDirection);
+        current.bounceType =
+            javelin::materials::bounceType(material.surfaceBsdf());
     }
 
     // Add our new vertices

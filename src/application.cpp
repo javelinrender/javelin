@@ -54,8 +54,11 @@ void Application::applyShaderballMaterial() {
         shaderball.baseColorB.value,
         1.0f);
     const float roughness = shaderball.roughness.value;
-    const bool isMetal = shaderball.bsdf.value == Parameters::Bsdf::DisneyMetal;
-    const float anisotropy = isMetal ? shaderball.anisotropy.value : 0.0f;
+    const bool hasAnisotropy =
+        shaderball.bsdf.value == Parameters::Bsdf::DisneyMetal ||
+        shaderball.bsdf.value == Parameters::Bsdf::DisneyGlass;
+    const float anisotropy = hasAnisotropy ? shaderball.anisotropy.value : 0.0f;
+    const float ior = shaderball.ior.value;
 
     materials::BSDF bsdf;
     switch (shaderball.bsdf.value) {
@@ -73,6 +76,13 @@ void Application::applyShaderballMaterial() {
             .roughnessFactor = roughness,
             .anisotropyFactor = anisotropy};
         break;
+    case Parameters::Bsdf::DisneyGlass:
+        bsdf = materials::bsdf::DisneyGlass{
+            .baseColorFactor = baseColor,
+            .roughnessFactor = roughness,
+            .anisotropyFactor = anisotropy,
+            .ior = ior};
+        break;
     }
 
     materials::PDF pdf;
@@ -87,6 +97,12 @@ void Application::applyShaderballMaterial() {
         pdf = materials::pdf::GGXVNDF{
             .roughnessFactor = roughness,
             .anisotropyFactor = anisotropy};
+        break;
+    case Parameters::Pdf::GGXVNDFGlass:
+        pdf = materials::pdf::GGXVNDFGlass{
+            .roughnessFactor = roughness,
+            .anisotropyFactor = anisotropy,
+            .ior = ior};
         break;
     }
 

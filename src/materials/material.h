@@ -42,6 +42,22 @@ struct DisneyMetal {
     std::optional<std::size_t> anisotropyTextureIdx;
 };
 
+/// Rough dielectric (Disney 2015 glass lobe). `ior` is the index of refraction
+/// of the inside of the surface relative to the outside; the surface normals
+/// are assumed to point outwards.
+struct DisneyGlass {
+    Vec4 baseColorFactor = Vec4(1.0f);
+    std::optional<std::size_t> baseColorTextureIdx;
+
+    float roughnessFactor = 1.0f;
+    std::optional<std::size_t> roughnessTextureIdx;
+
+    float anisotropyFactor = 0.0f;
+    std::optional<std::size_t> anisotropyTextureIdx;
+
+    float ior = 1.5f;
+};
+
 } // namespace bsdf
 
 namespace pdf {
@@ -58,18 +74,32 @@ struct GGXVNDF {
     std::optional<std::size_t> anisotropyTextureIdx;
 };
 
+/// Samples a visible microfacet normal, then chooses between reflection and
+/// refraction proportionally to the dielectric Fresnel term.
+struct GGXVNDFGlass {
+    float roughnessFactor = 1.0f;
+    std::optional<std::size_t> roughnessTextureIdx;
+
+    float anisotropyFactor = 0.0f;
+    std::optional<std::size_t> anisotropyTextureIdx;
+
+    float ior = 1.5f;
+};
+
 };
 
 using BSDF = std::variant<
     bsdf::LambertianDiffuse,
     bsdf::DisneyDiffuse,
-    bsdf::DisneyMetal>;
+    bsdf::DisneyMetal,
+    bsdf::DisneyGlass>;
 
 using PDF = std::variant<
     pdf::Uniform,
     pdf::Delta,
     pdf::CosineWeighted,
-    pdf::GGXVNDF>;
+    pdf::GGXVNDF,
+    pdf::GGXVNDFGlass>;
 
 template<typename T>
 Vec3 evaluateBsdf(
@@ -156,12 +186,42 @@ Vec3 evaluateBsdf<bsdf::DisneyDiffuse>(
         const Path::Vertex& vertex);
 
 template<>
+Vec3 samplePdf<pdf::GGXVNDFGlass>(
+        const Scene& scene,
+        const pdf::GGXVNDFGlass& pdf,
+        const Vec3& inDir,
+        const Path::Vertex& vertex);
+
+template<>
+float evaluatePdf<pdf::GGXVNDFGlass>(
+        const Scene& scene,
+        const pdf::GGXVNDFGlass& pdf,
+        const Vec3& inDir,
+        const Vec3& outDir,
+        const Path::Vertex& vertex);
+
+template<>
+Vec3 evaluateBsdf<bsdf::DisneyGlass>(
+        const Scene& scene,
+        const bsdf::DisneyGlass& bsdf,
+        const Vec3& inDir,
+        const Vec3& outDir,
+        const Path::Vertex& vertex);
+
+template<>
 Vec3 evaluateBsdf<bsdf::DisneyMetal>(
         const Scene& scene,
         const bsdf::DisneyMetal& bsdf,
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex);
+
+/// The kind of bounce a vertex with the given BSDF produces.
+inline Path::Vertex::BounceType bounceType(const BSDF& bsdf) {
+    return std::holds_alternative<bsdf::DisneyGlass>(bsdf) ?
+        Path::Vertex::BounceType::Refractive :
+        Path::Vertex::BounceType::Diffuse;
+}
 
 inline Vec3 evaluateBsdf(
         const Scene& scene,
@@ -176,6 +236,7 @@ inline Vec3 evaluateBsdf(
         bsdf);
 }
 
+/// @returns The zero vector if sampling failed and the path should end.
 inline Vec3 samplePdf(
         const Scene& scene,
         const PDF& pdf,
@@ -224,6 +285,15 @@ Vec3 evaluateBsdfWeight(
         const Scene& scene,
         const bsdf::DisneyMetal& bsdf,
         const pdf::GGXVNDF& pdf,
+        const Vec3& inDir,
+        const Vec3& outDir,
+        const Path::Vertex& vertex);
+
+template<>
+Vec3 evaluateBsdfWeight(
+        const Scene& scene,
+        const bsdf::DisneyGlass& bsdf,
+        const pdf::GGXVNDFGlass& pdf,
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex);

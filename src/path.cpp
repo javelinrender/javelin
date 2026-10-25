@@ -75,6 +75,11 @@ Path::Vertex chooseRandomVertexOnLight(const Scene& scene, const std::size_t lig
 } // namespace
 
 
+Vec3 Path::Vertex::offsetPosition(const Vec3& direction) const {
+    const float side = dot(direction, geometricNormal) < 0.0f ? -1.0f : 1.0f;
+    return position + side * Epsilon * geometricNormal;
+}
+
 Path Path::createRandomLightPath(const Scene& scene) {
     Path path;
     if (scene.lights.empty())
@@ -95,7 +100,8 @@ std::optional<Ray> Path::addBounce(
         return std::nullopt;
 
     const Material& material = scene.getMaterial(hit->materialIdx);
-    if (dot(inRay.d, hit->geometricNormal) > 0.0f) {
+    const bool backFace = dot(inRay.d, hit->geometricNormal) > 0.0f;
+    if (backFace) {
         hit->normal *= -1;
         hit->geometricNormal *= -1;
     }
@@ -105,17 +111,20 @@ std::optional<Ray> Path::addBounce(
         hit->position,
         hit->normal,
         hit->geometricNormal, hit->textureCoord, hit->materialIdx};
+    _path[_pathLength].backFace = backFace;
     ++_pathLength;
 
     if (terminationProbability && PCG32::rand() < *terminationProbability)
         return std::nullopt;
 
-    const Ray newRay = Ray(
-        last().position + Epsilon * last().geometricNormal,
-        javelin::materials::samplePdf(
-            scene, material.surfacePdf(), -inRay.d, last()));
-    last().bounceType = Path::Vertex::BounceType::Diffuse;
-    return newRay;
+    const Vec3 newDirection = javelin::materials::samplePdf(
+        scene, material.surfacePdf(), -inRay.d, last());
+    // A zero direction means the pdf failed to produce a valid sample.
+    if (length2(newDirection) == 0.0f)
+        return std::nullopt;
+
+    last().bounceType = javelin::materials::bounceType(material.surfaceBsdf());
+    return Ray(last().offsetPosition(newDirection), newDirection);
 }
 
 void Path::appendPath(Slice other) {
