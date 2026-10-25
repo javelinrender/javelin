@@ -111,6 +111,9 @@ public:
         return gammaCorrection(toneMapping(r), 2.2f);
     }
 
+    void applyCorrection();
+    void flipVertically();
+
     void load(const std::filesystem::path& fileName);
     void load(const std::span<const std::byte> bytes);
     void save(const std::filesystem::path& fileName) const;

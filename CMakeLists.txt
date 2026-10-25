@@ -1,81 +1,100 @@
 cmake_minimum_required(VERSION 3.25)
-include(FetchContent)
-include(CMakeDependentOption)
 
-project(MLT)
+project(javelin)
 
 set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# User configurable options
-option(MLT_ENABLE_TRACY "Enable profiling in Tracy" OFF)
-cmake_dependent_option(MLT_ENABLE_WAYLAND "Enable Wayland/EGL support" ON "UNIX;NOT APPLE" OFF)
+option(JAVELIN_ENABLE_PROFILING "Enable profiling" OFF)
 
-# Library options
-set(BUILD_SHARED_LIBS OFF)
-set(TRACY_ENABLE ${MLT_ENABLE_TRACY} CACHE BOOL "Enable profiling in Tracy" FORCE)
-set(GLM_BUILD_LIBRARY OFF CACHE BOOL "Build GLM dynamic library" FORCE)
+find_package(fastgltf REQUIRED)
+find_package(glm REQUIRED)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Quick QuickControls2)
 
-if(MLT_ENABLE_WAYLAND)
-    message(STATUS "MLT: Wayland support enabled")
+if(JAVELIN_ENABLE_PROFILING)
+    find_package(Tracy REQUIRED)
 endif()
-set(GLFW_BUILD_WAYLAND ${MLT_ENABLE_WAYLAND} CACHE BOOL "Build support for Wayland" FORCE)
-set(GLEW_EGL ${MLT_ENABLE_WAYLAND} CACHE BOOL "Enable EGL support" FORCE)
-set(BUILD_UTILS OFF CACHE BOOL "Build GLEW utilities" FORCE)
-
-# GLEW repository does not contain generated sources. Only releases include
-# generated sources.
-FetchContent_Declare(glew
-        URL https://github.com/nigels-com/glew/releases/download/glew-2.3.0/glew-2.3.0.tgz
-        URL_HASH SHA256=b261a06dfc8b970e0a1974488530e58dd2390acf68acb05b45235cd6fb17a086
-        SOURCE_SUBDIR build/cmake
-)
-FetchContent_MakeAvailable(glew)
-
-add_subdirectory(external/tracy)
-add_subdirectory(external/argparse)
-add_subdirectory(external/glfw)
-add_subdirectory(external/glm)
-add_subdirectory(external/fastgltf)
 
 set(SRC_FILES
-        src/application.cpp
-        src/aabb.cpp
-        src/aabb4.cpp
-        src/bvh.cpp
-        src/image.cpp
-        src/main.cpp
-        src/material.cpp
-        src/mesh.cpp
-        src/path.cpp
-        src/path_tracer.cpp
-        src/random.cpp
-        src/scene.cpp
-        src/threadpool.cpp
-        src/mlt.cpp
+    src/integrators/unidirectional_integrator.cpp
+    src/integrators/metropolis_integrator.cpp
+    src/ui/qt_application.cpp
+    src/ui/render_settings_model.cpp
+    src/ui/viewport.cpp
+    src/aabb.cpp
+    src/aabb4.cpp
+    src/application.cpp
+    src/bvh.cpp
+    src/image.cpp
+    src/main.cpp
+    src/material.cpp
+    src/mesh.cpp
+    src/path.cpp
+    src/random.cpp
+    src/render_settings.cpp
+    src/renderer.cpp
+    src/scene.cpp
+    src/thread_pool.cpp
 )
 
-add_executable(MLT ${SRC_FILES})
+qt_standard_project_setup()
+qt_policy(SET QTP0001 NEW)
+qt_policy(SET QTP0004 NEW)
+qt_add_executable(javelin ${SRC_FILES})
+qt_add_qml_module(javelin
+    URI javelin_ui
+    VERSION 1.0
+    QML_FILES
+        src/qml/Main.qml
+        src/qml/ViewportPanel.qml
+        src/qml/RenderSettingsPanel.qml
+        src/qml/ParameterEditor.qml
+        src/qml/ParameterRow.qml
+        src/qml/ParameterGroupEditor.qml
+        src/qml/EnumParameterEditor.qml
+        src/qml/IntegerParameterEditor.qml
+        src/qml/BoolParameterEditor.qml
+        src/qml/FilePathParameterEditor.qml
+)
 
-if(MLT_ENABLE_TRACY)
-        target_compile_definitions(MLT PUBLIC TRACY_ENABLE)
-        message(STATUS "MLT: Tracy profiling enabled")
-endif()
-
-# Enable SIMD (SSE/AVX) for x86/x64
-if (MSVC)
-        target_compile_options(MLT PRIVATE /arch:AVX2)
+# Enable SIMD (SSE/AVX) for x86/x64.
+if(MSVC)
+    target_compile_options(javelin PRIVATE /arch:AVX2)
 else()
-        target_compile_options(MLT PRIVATE -mavx2 -mfma -msse4.2)
+    target_compile_options(javelin PRIVATE -mavx2 -mfma -msse4.2)
 endif()
 
-target_compile_definitions(MLT PUBLIC
-        GLM_FORCE_INTRINSICS
-        GLM_ENABLE_EXPERIMENTAL
-        GLM_FORCE_SWIZZLE)
+target_compile_definitions(javelin PRIVATE
+    GLM_FORCE_INTRINSICS
+    GLM_ENABLE_EXPERIMENTAL
+    GLM_FORCE_SWIZZLE
+)
 
-target_include_directories(MLT PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/external/glfw/include)
-target_include_directories(MLT PUBLIC ${glew_SOURCE_DIR}/include)
-target_include_directories(MLT PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/external/fastgltf/include)
-target_include_directories(MLT PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/external/args)
-target_include_directories(MLT PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/external/stb_image)
-target_link_libraries(MLT PUBLIC TracyClient argparse glfw glew_s fastgltf glm::glm)
+if(JAVELIN_ENABLE_PROFILING)
+    target_link_libraries(javelin PRIVATE Tracy::TracyClient)
+    target_compile_definitions(javelin PRIVATE JAVELIN_ENABLE_PROFILING)
+    message(STATUS "Javelin: profiling enabled")
+else()
+    message(STATUS "Javelin: profiling disabled")
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_compile_definitions(javelin PRIVATE JAVELIN_OS_LINUX)
+    target_sources(javelin PRIVATE src/system_linux.cpp)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    target_compile_definitions(javelin PRIVATE JAVELIN_OS_WINDOWS)
+    target_sources(javelin PRIVATE src/system_windows.cpp)
+endif()
+
+target_include_directories(javelin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/stb_image
+)
+
+target_link_libraries(javelin PRIVATE
+    fastgltf::fastgltf
+    glm::glm
+    Qt6::Widgets
+    Qt6::Quick
+    Qt6::QuickControls2
+)

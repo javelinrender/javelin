@@ -28,12 +28,18 @@ struct Camera {
               up(normalize(up)),
               right(normalize(cross(forward, up))) {}
 
+    void setResolution(int width, int height) {
+        this->width = width;
+        this->height = height;
+        aspectRatio = static_cast<float>(width) / static_cast<float>(height);
+    }
+
     void move(Vec3 delta);
     void rotate(float yaw, float pitch);
 
-    const int width;
-    const int height;
-    const float aspectRatio;
+    int width;
+    int height;
+    float aspectRatio;
     const float fov;
     const float filmSize;
     const float distanceToFilm;
