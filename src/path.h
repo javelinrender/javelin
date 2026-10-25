@@ -36,6 +36,13 @@ public:
         std::optional<std::size_t> materialIdx;
         /// Only used for explicit vertices.
         std::optional<std::size_t> lightIdx;
+        /// `normal` and `geometricNormal` are flipped to face the incoming ray;
+        /// this is set if that flip happened (i.e. the ray hit the back side).
+        bool backFace = false;
+
+        /// `position` nudged to the side of the surface that `direction`
+        /// points towards, so that rays leaving the surface don't self-hit.
+        Vec3 offsetPosition(const Vec3& direction) const;
     };
 
     using Slice = std::span<const Vertex>;

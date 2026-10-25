@@ -176,14 +176,17 @@ struct ShaderballMaterialParameters {
         LambertianDiffuse,
         DisneyDiffuse,
         DisneyMetal,
+        DisneyGlass,
     };
     enum class Pdf {
         Uniform,
         CosineWeighted,
         GGXVNDF,
+        GGXVNDFGlass,
     };
 
-    static bool isDisneyMetal(const RenderSettings& settings);
+    static bool hasAnisotropy(const RenderSettings& settings);
+    static bool isDisneyGlass(const RenderSettings& settings);
 
     EnumParameter<Bsdf> bsdf{
         .name = "shaderball_bsdf",
@@ -193,6 +196,7 @@ struct ShaderballMaterialParameters {
             {Bsdf::LambertianDiffuse, "lambertian_diffuse", "Lambertian Diffuse"},
             {Bsdf::DisneyDiffuse, "disney_diffuse", "Disney Diffuse"},
             {Bsdf::DisneyMetal, "disney_metal", "Disney Metal"},
+            {Bsdf::DisneyGlass, "disney_glass", "Disney Glass"},
         },
     };
     EnumParameter<Pdf> pdf{
@@ -203,6 +207,7 @@ struct ShaderballMaterialParameters {
             {Pdf::Uniform, "uniform", "Uniform"},
             {Pdf::CosineWeighted, "cosine_weighted", "Cosine Weighted"},
             {Pdf::GGXVNDF, "ggx_vndf", "GGX VNDF"},
+            {Pdf::GGXVNDFGlass, "ggx_vndf_glass", "GGX VNDF (Glass)"},
         },
     };
     FloatParameter baseColorR{
@@ -239,7 +244,15 @@ struct ShaderballMaterialParameters {
         .value = 0.0f,
         .min = 0.0f,
         .max = 1.0f,
-        .visible = isDisneyMetal,
+        .visible = hasAnisotropy,
+    };
+    FloatParameter ior{
+        .name = "shaderball_ior",
+        .label = "Index of Refraction",
+        .value = 1.5f,
+        .min = 1.01f,
+        .max = 2.5f,
+        .visible = isDisneyGlass,
     };
 
     JAVELIN_REGISTER_PARAMETERS(
@@ -249,7 +262,8 @@ struct ShaderballMaterialParameters {
         baseColorG,
         baseColorB,
         roughness,
-        anisotropy)
+        anisotropy,
+        ior)
 };
 
 struct RenderSettings {
