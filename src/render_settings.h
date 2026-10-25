@@ -5,6 +5,7 @@
 #pragma once
 
 #include <algorithm>
+#include <filesystem>
 #include <functional>
 #include <optional>
 #include <string>
@@ -84,6 +85,15 @@ struct IntegerParameter {
     ParameterVisibility visible = true;
 };
 
+struct FloatParameter {
+    JAVELIN_PARAMETER_METADATA
+    float value;
+    std::optional<float> min;
+    std::optional<float> max;
+    float step = 0.01f;
+    ParameterVisibility visible = true;
+};
+
 struct BoolParameter {
     JAVELIN_PARAMETER_METADATA
     bool value;
@@ -160,6 +170,88 @@ struct MutationParameters {
         bidirectional)
 };
 
+/// Material of the outer part of the shaderball in the shaderball scene.
+struct ShaderballMaterialParameters {
+    enum class Bsdf {
+        LambertianDiffuse,
+        DisneyDiffuse,
+        DisneyMetal,
+    };
+    enum class Pdf {
+        Uniform,
+        CosineWeighted,
+        GGXVNDF,
+    };
+
+    static bool isDisneyMetal(const RenderSettings& settings);
+
+    EnumParameter<Bsdf> bsdf{
+        .name = "shaderball_bsdf",
+        .label = "BSDF",
+        .value = Bsdf::DisneyDiffuse,
+        .choices = {
+            {Bsdf::LambertianDiffuse, "lambertian_diffuse", "Lambertian Diffuse"},
+            {Bsdf::DisneyDiffuse, "disney_diffuse", "Disney Diffuse"},
+            {Bsdf::DisneyMetal, "disney_metal", "Disney Metal"},
+        },
+    };
+    EnumParameter<Pdf> pdf{
+        .name = "shaderball_pdf",
+        .label = "PDF",
+        .value = Pdf::CosineWeighted,
+        .choices = {
+            {Pdf::Uniform, "uniform", "Uniform"},
+            {Pdf::CosineWeighted, "cosine_weighted", "Cosine Weighted"},
+            {Pdf::GGXVNDF, "ggx_vndf", "GGX VNDF"},
+        },
+    };
+    FloatParameter baseColorR{
+        .name = "shaderball_base_color_r",
+        .label = "Base Color (Red)",
+        .value = 0.17585601f,
+        .min = 0.0f,
+        .max = 1.0f,
+    };
+    FloatParameter baseColorG{
+        .name = "shaderball_base_color_g",
+        .label = "Base Color (Green)",
+        .value = 0.40394878f,
+        .min = 0.0f,
+        .max = 1.0f,
+    };
+    FloatParameter baseColorB{
+        .name = "shaderball_base_color_b",
+        .label = "Base Color (Blue)",
+        .value = 0.79992914f,
+        .min = 0.0f,
+        .max = 1.0f,
+    };
+    FloatParameter roughness{
+        .name = "shaderball_roughness",
+        .label = "Roughness",
+        .value = 0.5f,
+        .min = 0.0f,
+        .max = 1.0f,
+    };
+    FloatParameter anisotropy{
+        .name = "shaderball_anisotropy",
+        .label = "Anisotropy",
+        .value = 0.0f,
+        .min = 0.0f,
+        .max = 1.0f,
+        .visible = isDisneyMetal,
+    };
+
+    JAVELIN_REGISTER_PARAMETERS(
+        bsdf,
+        pdf,
+        baseColorR,
+        baseColorG,
+        baseColorB,
+        roughness,
+        anisotropy)
+};
+
 struct RenderSettings {
     FilePathParameter sceneFile{
         .name = "scene_file",
@@ -225,6 +317,11 @@ struct RenderSettings {
         return settings.integrator.value == Integrator::Metropolis;
     }
 
+    static bool isShaderballScene(const RenderSettings& settings) {
+        return std::filesystem::path(settings.sceneFile.value).stem() ==
+            "shaderball";
+    }
+
     IntegerParameter<int> metropolisMarkovChains{
         .name = "metropolis_markov_chains",
         .label = "Markov Chains",
@@ -239,6 +336,11 @@ struct RenderSettings {
         .label = "Enabled Mutations",
         .visible = isMetropolis,
     };
+    ParameterGroup<ShaderballMaterialParameters> shaderballMaterial{
+        .name = "shaderball_material",
+        .label = "Shaderball Material",
+        .visible = isShaderballScene,
+    };
 
     JAVELIN_REGISTER_PARAMETERS(
         sceneFile,
@@ -248,7 +350,8 @@ struct RenderSettings {
         samplesPerPixel,
         threadPoolSize,
         metropolisMarkovChains,
-        metropolisMutations)
+        metropolisMutations,
+        shaderballMaterial)
 
     template<typename Function>
     void forEachParameter(Function&& function) {

@@ -5,7 +5,8 @@
 #pragma once
 
 #include <algorithm>
-
+#include <cassert>
+#include <type_traits>
 #include <variant>
 
 #include "path.h"
@@ -181,8 +182,14 @@ inline Vec3 samplePdf(
         const Vec3& inDir,
         const Path::Vertex& vertex) {
     return std::visit(
-        [&](const auto& value) {
-            return samplePdf(scene, value, inDir, vertex);
+        [&](const auto& value) -> Vec3 {
+            // TODO: pdf::Delta has no sampling or evaluation yet.
+            if constexpr (std::is_same_v<std::decay_t<decltype(value)>, pdf::Delta>) {
+                assert(false && "Delta pdf is not supported");
+                return Vec3(0.0f);
+            } else {
+                return samplePdf(scene, value, inDir, vertex);
+            }
         },
         pdf);
 }
@@ -199,8 +206,8 @@ Vec3 evaluateBsdfWeight(
     const float pdfValue = evaluatePdf(scene, pdf, inDir, outDir, vertex);
     if (!(pdfValue > 0.0f))
         return Vec3(0.0f);
-    // The Disney BSDFs already include the |n . outDir| factor.
-    return evaluateBsdf(scene, bsdf, inDir, outDir, vertex) / pdfValue;
+    return evaluateBsdf(scene, bsdf, inDir, outDir, vertex) *
+        std::abs(dot(vertex.normal, outDir)) / pdfValue;
 }
 
 template<>
@@ -220,6 +227,27 @@ Vec3 evaluateBsdfWeight(
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex);
+
+inline Vec3 evaluateBsdfWeight(
+        const Scene& scene,
+        const BSDF& bsdf,
+        const PDF& pdf,
+        const Vec3& inDir,
+        const Vec3& outDir,
+        const Path::Vertex& vertex) {
+    return std::visit(
+        [&](const auto& bsdfValue, const auto& pdfValue) -> Vec3 {
+            if constexpr (std::is_same_v<
+                    std::decay_t<decltype(pdfValue)>, pdf::Delta>) {
+                assert(false && "Delta pdf is not supported");
+                return Vec3(0.0f);
+            } else {
+                return evaluateBsdfWeight(
+                    scene, bsdfValue, pdfValue, inDir, outDir, vertex);
+            }
+        },
+        bsdf, pdf);
+}
 
 
 } // namespace javelin::materials
