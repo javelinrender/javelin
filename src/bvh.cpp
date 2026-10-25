@@ -52,10 +52,13 @@ std::optional<BVH::HitInfo> doesRayIntersectTriangle(
     const Vec3& ba = triangle.ba;
     const Vec3& ca = triangle.ca;
     const Vec3 oa = triangle.a - ray.o;
-    const Vec3 geometricNormal = cross(ba, ca);
+
+    // Unnormalized!!! Scaled by triangle area.
+    const Vec3 geometricNormal = cross(ba, ca); 
     const float determinant = dot(geometricNormal, ray.d);
 
-    if (std::abs(determinant) < Epsilon)
+    // Scale the epsilon value by the triangle area.
+    if (determinant * determinant <= Epsilon * Epsilon * dot(geometricNormal, geometricNormal))
         return std::nullopt; // The ray is parallel to the triangle.
 
     const float invDeterminant = 1 / determinant;
