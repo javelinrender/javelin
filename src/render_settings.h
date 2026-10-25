@@ -177,16 +177,24 @@ struct ShaderballMaterialParameters {
         DisneyDiffuse,
         DisneyMetal,
         DisneyGlass,
+        DisneySheen,
+        DisneyBSDF,
     };
     enum class Pdf {
         Uniform,
         CosineWeighted,
         GGXVNDF,
         GGXVNDFGlass,
+        DisneyBSDF,
     };
 
     static bool hasAnisotropy(const RenderSettings& settings);
     static bool isDisneyGlass(const RenderSettings& settings);
+    static bool isDisneySheen(const RenderSettings& settings);
+    static bool isDisneyBSDF(const RenderSettings& settings);
+
+    static bool hasIor(const RenderSettings& settings);
+    static bool hasSheenTint(const RenderSettings& settings);
 
     EnumParameter<Bsdf> bsdf{
         .name = "shaderball_bsdf",
@@ -197,6 +205,8 @@ struct ShaderballMaterialParameters {
             {Bsdf::DisneyDiffuse, "disney_diffuse", "Disney Diffuse"},
             {Bsdf::DisneyMetal, "disney_metal", "Disney Metal"},
             {Bsdf::DisneyGlass, "disney_glass", "Disney Glass"},
+            {Bsdf::DisneySheen, "disney_sheen", "Disney Sheen"},
+            {Bsdf::DisneyBSDF, "disney_bsdf", "Disney BSDF"},
         },
     };
     EnumParameter<Pdf> pdf{
@@ -208,6 +218,7 @@ struct ShaderballMaterialParameters {
             {Pdf::CosineWeighted, "cosine_weighted", "Cosine Weighted"},
             {Pdf::GGXVNDF, "ggx_vndf", "GGX VNDF"},
             {Pdf::GGXVNDFGlass, "ggx_vndf_glass", "GGX VNDF (Glass)"},
+            {Pdf::DisneyBSDF, "disney_bsdf", "Disney BSDF"},
         },
     };
     FloatParameter baseColorR{
@@ -252,7 +263,56 @@ struct ShaderballMaterialParameters {
         .value = 1.5f,
         .min = 1.01f,
         .max = 2.5f,
-        .visible = isDisneyGlass,
+        .visible = hasIor,
+    };
+
+    FloatParameter metallic{
+        .name = "shaderball_metallic",
+        .label = "Metallic",
+        .value = 0.0f,
+        .min = 0.0f,
+        .max = 1.0f,
+        .visible = isDisneyBSDF,
+    };
+    FloatParameter specularTransmission{
+        .name = "shaderball_specular_transmission",
+        .label = "Specular Transmission",
+        .value = 0.0f,
+        .min = 0.0f,
+        .max = 1.0f,
+        .visible = isDisneyBSDF,
+    };
+    FloatParameter specular{
+        .name = "shaderball_specular",
+        .label = "Specular",
+        .value = 1.0f,
+        .min = 0.0f,
+        .max = 1.0f,
+        .visible = isDisneyBSDF,
+    };
+    FloatParameter specularTint{
+        .name = "shaderball_specular_tint",
+        .label = "Specular Tint",
+        .value = 0.0f,
+        .min = 0.0f,
+        .max = 1.0f,
+        .visible = isDisneyBSDF,
+    };
+    FloatParameter sheen{
+        .name = "shaderball_sheen",
+        .label = "Sheen",
+        .value = 0.0f,
+        .min = 0.0f,
+        .max = 1.0f,
+        .visible = isDisneyBSDF,
+    };
+    FloatParameter sheenTint{
+        .name = "shaderball_sheen_tint",
+        .label = "Sheen Tint",
+        .value = 0.0f,
+        .min = 0.0f,
+        .max = 1.0f,
+        .visible = hasSheenTint,
     };
 
     JAVELIN_REGISTER_PARAMETERS(
@@ -263,7 +323,13 @@ struct ShaderballMaterialParameters {
         baseColorB,
         roughness,
         anisotropy,
-        ior)
+        ior,
+        metallic,
+        specularTransmission,
+        specular,
+        specularTint,
+        sheen,
+        sheenTint)
 };
 
 struct RenderSettings {

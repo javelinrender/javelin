@@ -29,10 +29,6 @@ std::tuple<Vec2, Ray> randomEyeRay(const Scene& scene) {
     return {pixel, scene.eyeRay(pixel)};
 }
 
-float luminance(const Vec3& color) {
-    return 0.299 * color.x + 0.587 * color.y + 0.114 * color.z;
-}
-
 Vec2 pixelOffset(float r1, float r2) {
     float phi = PCG32::rand() * 2 * PI;
     float r = r2 * std::exp(-std::log(r2/r1) * PCG32::rand());
@@ -167,8 +163,7 @@ std::optional<MutationInfo> PathSpaceMutator::bidirectionalMutation(
         if (length2(newDirection) == 0.0f)
             return std::nullopt;
         ray = Ray(current.offsetPosition(newDirection), newDirection);
-        current.bounceType =
-            javelin::materials::bounceType(material.surfaceBsdf());
+        current.bounceType = material.getType();
     }
 
     // Add our new vertices
