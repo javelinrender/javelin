@@ -116,6 +116,7 @@ bool Scene::loadGltf(const std::filesystem::path& filePath) {
     images.clear();
     lights.clear();
     materials.clear();
+    _shaderballMaterialIdx.reset();
 
     // Load images
     // Adapted from example:
@@ -196,6 +197,13 @@ bool Scene::loadGltf(const std::filesystem::path& filePath) {
 
         // Index of refraction
         newMaterial.ior = material.ior;
+
+        // glTF has no extra parameters for Disney diffuse beyond these.
+        newMaterial.bsdf = javelin::materials::bsdf::DisneyDiffuse{
+            .baseColorFactor = newMaterial.baseColorFactor,
+            .baseColorTextureIdx = newMaterial.baseColorTextureIdx,
+            .roughnessFactor = newMaterial.roughnessFactor,
+            .roughnessTextureIdx = newMaterial.metallicRoughnessTextureIdx};
 
         std::println(std::cout, "Loaded material name={}", material.name);
     }
@@ -321,6 +329,10 @@ bool Scene::loadGltf(const std::filesystem::path& filePath) {
                 newMesh.triangleAreas.push_back(triangleArea);
                 ++primitiveTriangleCount;
             }
+
+            // The shaderball scene's outer part is the "material_surface" mesh.
+            if (mesh.name == "material_surface" && primitive.materialIndex)
+                _shaderballMaterialIdx = *primitive.materialIndex;
 
             // If this primitive has an emmisive material, we need to also
             // add it as a light source.

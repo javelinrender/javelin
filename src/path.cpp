@@ -95,7 +95,7 @@ std::optional<Ray> Path::addBounce(
         return std::nullopt;
 
     const Material& material = scene.getMaterial(hit->materialIdx);
-    if (material.getType() != Path::Vertex::BounceType::Refractive && dot(inRay.d, hit->geometricNormal) > 0.0f) {
+    if (dot(inRay.d, hit->geometricNormal) > 0.0f) {
         hit->normal *= -1;
         hit->geometricNormal *= -1;
     }
@@ -110,12 +110,10 @@ std::optional<Ray> Path::addBounce(
     if (terminationProbability && PCG32::rand() < *terminationProbability)
         return std::nullopt;
 
-    // const auto [newRay, bounceType] = material.sampleDirection(
-    //     -inRay.d, last());
-    // last().bounceType = bounceType;
     const Ray newRay = Ray(
         last().position + Epsilon * last().geometricNormal,
-        javelin::materials::samplePdf(scene, scene.pdf, -inRay.d, last()));
+        javelin::materials::samplePdf(
+            scene, material.surfacePdf(), -inRay.d, last()));
     last().bounceType = Path::Vertex::BounceType::Diffuse;
     return newRay;
 }
@@ -165,8 +163,6 @@ EvaluationResult evaluateImplicit(
     const Path::Vertex& v3) {
 
     EvaluationResult result;
-    Vec3 inDir = normalize(v1.position - v2.position);
-    Vec3 outDir = normalize(v1.position - v2.position);
 
     const Material& material = scene.getMaterial(v2.materialIdx);
 
@@ -174,7 +170,7 @@ EvaluationResult evaluateImplicit(
         1.0f - Path::TerminationProbability;
 
     result.radiance = javelin::materials::evaluateBsdfWeight(
-        scene, scene.bsdf, scene.pdf,
+        scene, material.surfaceBsdf(), material.surfacePdf(),
         normalize(v1.position - v2.position),
         normalize(v3.position - v2.position),
         v2);
@@ -200,7 +196,8 @@ Vec3 evaluateExplicitLight(
 
     const Material& material = scene.getMaterial(x2.materialIdx);
     
-    result *= material.bsdf(x2);
+    result *= javelin::materials::evaluateBsdf(
+        scene, material.surfaceBsdf(), inDir, outDir, x2);
     result /= lightDist * lightDist;
     result *= std::max(0.0f, dot(x2.normal, outDir));
 
@@ -240,8 +237,10 @@ Vec3 evaluateExplicit(
     const Material& material1 = scene.getMaterial(x2.materialIdx);
     const Material& material2 = scene.getMaterial(y2.materialIdx);
 
-    result *= material1.bsdf(x2);
-    result *= material2.bsdf(x2);
+    result *= javelin::materials::evaluateBsdf(
+        scene, material1.surfaceBsdf(), -x1tox2, x2toy2, x2);
+    result *= javelin::materials::evaluateBsdf(
+        scene, material2.surfaceBsdf(), -y1toy2, -x2toy2, y2);
     result *= invDist * invDist;
 
     result *= std::max(0.0f, dot(x2.normal, x2toy2));

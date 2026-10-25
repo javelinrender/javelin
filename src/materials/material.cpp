@@ -192,8 +192,7 @@ Vec3 evaluateBsdf<bsdf::DisneyDiffuse>(
         return detail::schlick(1.0f, fd90, dot(vertex.normal, w));
     };
 
-    return (1.0f / PI) * baseColor * fd(inDir) * fd(outDir) *
-        std::abs(dot(vertex.normal, outDir));
+    return (1.0f / PI) * baseColor * fd(inDir) * fd(outDir);
 }
 
 template<>
@@ -225,7 +224,7 @@ Vec3 evaluateBsdf<bsdf::DisneyMetal>(
     const float gm = detail::smithG1(inLocal, alpha) *
         detail::smithG1(outLocal, alpha);
 
-    return fm * (dm * gm / (4.0f * std::abs(inLocal.z)));
+    return fm * (dm * gm / (4.0f * std::abs(inLocal.z) * std::abs(outLocal.z)));
 }
 
 template<>
@@ -315,7 +314,7 @@ Vec3 evaluateBsdfWeight(
     const Vec3 h = normalize(inDir + outDir);
     const Vec3 fm = detail::schlick(baseColor, Vec3(1.0f), dot(h, outDir));
 
-    // f / pdf reduces to F * G1(out) since D and G1(in) cancel.
+    // f * |n . out| / pdf reduces to F * G1(out) since D and G1(in) cancel.
     return fm * detail::smithG1(outLocal, alpha);
 }
 

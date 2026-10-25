@@ -11,6 +11,7 @@
 #include "path.h"
 #include "types.h"
 #include "random.h"
+#include "materials/material.h"
 
 
 struct MaterialData {
@@ -31,6 +32,10 @@ struct MaterialData {
     std::optional<std::size_t> transmissionTextureIdx;
 
     float ior = 1.5f;
+
+    // Used for path tracing; populated from the fields above by the loader.
+    javelin::materials::BSDF bsdf = javelin::materials::bsdf::DisneyDiffuse{};
+    javelin::materials::PDF pdf = javelin::materials::pdf::CosineWeighted{};
 
     Path::Vertex::BounceType getType() const {
         if (transmissionFactor > 0.5f && metallicFactor < 0.5f)
@@ -62,6 +67,14 @@ public:
 
     // Gets the color that this material emits
     Vec3 emission(const Path::Vertex& vertex) const;
+
+    const javelin::materials::BSDF& surfaceBsdf() const {
+        return _data.bsdf;
+    }
+    const javelin::materials::PDF& surfacePdf() const {
+        return _data.pdf;
+    }
+
     Path::Vertex::BounceType getType() const { return _data.getType(); }
 
     // inRay is meant to point away from the surface normal

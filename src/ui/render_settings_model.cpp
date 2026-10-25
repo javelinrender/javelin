@@ -63,6 +63,23 @@ QVariantMap parameterMap(
 }
 
 QVariantMap parameterMap(
+        const FloatParameter& parameter,
+        const RenderSettings& settings) {
+    // Keeps the editor's scaled integer range within 32 bits.
+    constexpr float Limit = 1.0e6f;
+    return {
+        {"name", toQString(parameter.name)},
+        {"label", toQString(parameter.label)},
+        {"type", "float"},
+        {"visible", parameter.visible(settings)},
+        {"value", parameter.value},
+        {"minimum", parameter.min.value_or(-Limit)},
+        {"maximum", parameter.max.value_or(Limit)},
+        {"step", parameter.step},
+    };
+}
+
+QVariantMap parameterMap(
         const BoolParameter& parameter,
         const RenderSettings& settings) {
     return {

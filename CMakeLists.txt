@@ -54,6 +54,7 @@ qt_add_qml_module(javelin
         src/qml/ParameterGroupEditor.qml
         src/qml/EnumParameterEditor.qml
         src/qml/IntegerParameterEditor.qml
+        src/qml/FloatParameterEditor.qml
         src/qml/BoolParameterEditor.qml
         src/qml/FilePathParameterEditor.qml
 )

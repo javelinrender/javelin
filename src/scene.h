@@ -75,22 +75,10 @@ public:
     std::vector<Image> images;
     std::vector<Light> lights;
 
-    // const javelin::materials::bsdf::LambertianDiffuse bsdf{
-    //     .baseColorFactor = Vec4(.5,.5,.5,1),
-    // };
-    const javelin::materials::bsdf::DisneyMetal bsdf{
-        .baseColorFactor = Vec4(.8,.8,.8,1),
-        .roughnessFactor = 0.6f
-    };
-
-    // const javelin::materials::pdf::CosineWeighted pdf{};
-    const javelin::materials::pdf::GGXVNDF pdf{
-        .roughnessFactor = 0.6f
-    };
-
 private:
     static inline const MaterialData DefaultMaterialData{};
     std::vector<MaterialData> materials;
+    std::optional<std::size_t> _shaderballMaterialIdx;
 
 public:
     struct HitInfo {
@@ -108,6 +96,19 @@ public:
         float maxDistance = std::numeric_limits<float>::max()) const;
 
     bool loadGltf(const std::filesystem::path& filePath);
+
+    /// Overrides the BSDF and PDF of the shaderball's outer part.
+    /// @returns false if the loaded scene is not the shaderball scene.
+    bool setShaderballMaterial(
+            const javelin::materials::BSDF& bsdf,
+            const javelin::materials::PDF& pdf) {
+        if (!_shaderballMaterialIdx)
+            return false;
+        MaterialData& material = materials[*_shaderballMaterialIdx];
+        material.bsdf = bsdf;
+        material.pdf = pdf;
+        return true;
+    }
 
     Ray eyeRay(Vec2 pixel) const;
 

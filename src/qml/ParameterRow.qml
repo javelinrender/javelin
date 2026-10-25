@@ -18,8 +18,8 @@ RowLayout {
 
     Label {
         id: label
-        visible: !row.grouped && row.parameter.type !== "bool"
-        Layout.preferredWidth: 160
+        visible: row.parameter.type !== "bool"
+        Layout.preferredWidth: row.grouped ? 130 : 160
         Layout.preferredHeight: row.firstRowHeight
         Layout.alignment: Qt.AlignTop
         text: row.parameter.label

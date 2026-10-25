@@ -12,6 +12,11 @@
 
 namespace javelin {
 
+bool ShaderballMaterialParameters::isDisneyMetal(
+        const RenderSettings& settings) {
+    return settings.shaderballMaterial.bsdf.value == Bsdf::DisneyMetal;
+}
+
 namespace {
 
 std::string cliOptionName(const CliOption& option) {
@@ -59,6 +64,18 @@ std::optional<std::string> setValue(
 }
 
 std::optional<std::string> setValue(
+        FloatParameter& parameter, std::string_view value) {
+    float parsedValue;
+    const auto [end, error] = std::from_chars(
+        value.data(), value.data() + value.size(), parsedValue);
+    if (error != std::errc{} || end != value.data() + value.size())
+        return std::format("{} must be a number.", parameter.label);
+
+    parameter.value = parsedValue;
+    return std::nullopt;
+}
+
+std::optional<std::string> setValue(
         BoolParameter& parameter, std::string_view value) {
     if (value == "true")
         parameter.value = true;
@@ -87,6 +104,16 @@ std::optional<std::string> validate(const EnumParameter<Enum>& parameter) {
 
 template<typename Integer>
 std::optional<std::string> validate(const IntegerParameter<Integer>& parameter) {
+    if (parameter.min && parameter.value < *parameter.min)
+        return std::format(
+            "{} must be at least {}.", parameter.label, *parameter.min);
+    if (parameter.max && parameter.value > *parameter.max)
+        return std::format(
+            "{} must be at most {}.", parameter.label, *parameter.max);
+    return std::nullopt;
+}
+
+std::optional<std::string> validate(const FloatParameter& parameter) {
     if (parameter.min && parameter.value < *parameter.min)
         return std::format(
             "{} must be at least {}.", parameter.label, *parameter.min);
@@ -140,6 +167,13 @@ void appendHelpDetails(std::string& help, const EnumParameter<Enum>& parameter) 
 
 template<typename Integer>
 void appendHelpDetails(std::string& help, const IntegerParameter<Integer>& parameter) {
+    if (parameter.min)
+        help += std::format(" (minimum: {})", *parameter.min);
+    if (parameter.max)
+        help += std::format(" (maximum: {})", *parameter.max);
+}
+
+void appendHelpDetails(std::string& help, const FloatParameter& parameter) {
     if (parameter.min)
         help += std::format(" (minimum: {})", *parameter.min);
     if (parameter.max)

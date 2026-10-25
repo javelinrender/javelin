@@ -28,6 +28,8 @@ public:
     void handleSettingsChanged();
 
 private:
+    void applyShaderballMaterial();
+
     RenderSettings _settings;
     ThreadPool _pool;
     Scene _scene;
