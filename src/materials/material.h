@@ -4,9 +4,7 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cassert>
-#include <type_traits>
 #include <variant>
 
 #include "path.h"
@@ -15,7 +13,7 @@
 class Scene;
 
 namespace javelin::materials {
-    
+
 namespace bsdf {
 
 struct LambertianDiffuse {
@@ -42,6 +40,19 @@ struct DisneyMetal {
     std::optional<std::size_t> anisotropyTextureIdx;
 };
 
+struct DisneySheen {
+    Vec4 baseColorFactor = Vec4(1.0f);
+    std::optional<std::size_t> baseColorTextureIdx;
+
+    float sheenTintFactor = 0.0f;
+    std::optional<std::size_t> sheenTintTextureIdx;
+};
+
+struct DisneyClearcoat {
+    Vec4 glossFactor = Vec4(1.0f);
+    std::optional<std::size_t> glossTextureIdx;
+};
+
 /// Rough dielectric (Disney 2015 glass lobe). `ior` is the index of refraction
 /// of the inside of the surface relative to the outside; the surface normals
 /// are assumed to point outwards.
@@ -54,6 +65,38 @@ struct DisneyGlass {
 
     float anisotropyFactor = 0.0f;
     std::optional<std::size_t> anisotropyTextureIdx;
+
+    float ior = 1.5f;
+};
+
+/// Disney principled BSDF
+struct Disney {
+    Vec4 baseColorFactor = Vec4(1.0f);
+    std::optional<std::size_t> baseColorTextureIdx;
+
+    float roughnessFactor = 1.0f;
+    std::optional<std::size_t> roughnessTextureIdx;
+
+    float anisotropyFactor = 0.0f;
+    std::optional<std::size_t> anisotropyTextureIdx;
+
+    float metallicFactor = 0.0f;
+    std::optional<std::size_t> metallicTextureIdx;
+
+    float specularTransmissionFactor = 0.0f;
+    std::optional<std::size_t> specularTransmissionTextureIdx;
+
+    float specularFactor = 1.0f;
+    std::optional<std::size_t> specularTextureIdx;
+
+    float specularTintFactor = 0.0f;
+    std::optional<std::size_t> specularTintTextureIdx;
+
+    float sheenFactor = 0.0f;
+    std::optional<std::size_t> sheenTextureIdx;
+
+    float sheenTintFactor = 0.0f;
+    std::optional<std::size_t> sheenTintTextureIdx;
 
     float ior = 1.5f;
 };
@@ -86,20 +129,38 @@ struct GGXVNDFGlass {
     float ior = 1.5f;
 };
 
+struct Disney {
+    float roughnessFactor = 1.0f;
+    std::optional<std::size_t> roughnessTextureIdx;
+
+    float anisotropyFactor = 0.0f;
+    std::optional<std::size_t> anisotropyTextureIdx;
+
+    float metallicFactor = 0.0f;
+    std::optional<std::size_t> metallicTextureIdx;
+
+    float specularTransmissionFactor = 0.0f;
+    std::optional<std::size_t> specularTransmissionTextureIdx;
+
+    float ior = 1.5f;
+};
+
 };
 
 using BSDF = std::variant<
     bsdf::LambertianDiffuse,
     bsdf::DisneyDiffuse,
     bsdf::DisneyMetal,
-    bsdf::DisneyGlass>;
+    bsdf::DisneyGlass,
+    bsdf::DisneySheen,
+    bsdf::Disney>;
 
 using PDF = std::variant<
     pdf::Uniform,
-    pdf::Delta,
     pdf::CosineWeighted,
     pdf::GGXVNDF,
-    pdf::GGXVNDFGlass>;
+    pdf::GGXVNDFGlass,
+    pdf::Disney>;
 
 template<typename T>
 Vec3 evaluateBsdf(
@@ -186,6 +247,14 @@ Vec3 evaluateBsdf<bsdf::DisneyDiffuse>(
         const Path::Vertex& vertex);
 
 template<>
+Vec3 evaluateBsdf<bsdf::DisneySheen>(
+        const Scene& scene,
+        const bsdf::DisneySheen& bsdf,
+        const Vec3& inDir,
+        const Vec3& outDir,
+        const Path::Vertex& vertex);
+
+template<>
 Vec3 samplePdf<pdf::GGXVNDFGlass>(
         const Scene& scene,
         const pdf::GGXVNDFGlass& pdf,
@@ -216,12 +285,28 @@ Vec3 evaluateBsdf<bsdf::DisneyMetal>(
         const Vec3& outDir,
         const Path::Vertex& vertex);
 
-/// The kind of bounce a vertex with the given BSDF produces.
-inline Path::Vertex::BounceType bounceType(const BSDF& bsdf) {
-    return std::holds_alternative<bsdf::DisneyGlass>(bsdf) ?
-        Path::Vertex::BounceType::Refractive :
-        Path::Vertex::BounceType::Diffuse;
-}
+template<>
+Vec3 evaluateBsdf<bsdf::Disney>(
+        const Scene& scene,
+        const bsdf::Disney& bsdf,
+        const Vec3& inDir,
+        const Vec3& outDir,
+        const Path::Vertex& vertex);
+
+template<>
+Vec3 samplePdf<pdf::Disney>(
+        const Scene& scene,
+        const pdf::Disney& pdf,
+        const Vec3& inDir,
+        const Path::Vertex& vertex);
+
+template<>
+float evaluatePdf<pdf::Disney>(
+        const Scene& scene,
+        const pdf::Disney& pdf,
+        const Vec3& inDir,
+        const Vec3& outDir,
+        const Path::Vertex& vertex);
 
 inline Vec3 evaluateBsdf(
         const Scene& scene,
@@ -244,13 +329,7 @@ inline Vec3 samplePdf(
         const Path::Vertex& vertex) {
     return std::visit(
         [&](const auto& value) -> Vec3 {
-            // TODO: pdf::Delta has no sampling or evaluation yet.
-            if constexpr (std::is_same_v<std::decay_t<decltype(value)>, pdf::Delta>) {
-                assert(false && "Delta pdf is not supported");
-                return Vec3(0.0f);
-            } else {
-                return samplePdf(scene, value, inDir, vertex);
-            }
+            return samplePdf(scene, value, inDir, vertex);
         },
         pdf);
 }
@@ -298,6 +377,15 @@ Vec3 evaluateBsdfWeight(
         const Vec3& outDir,
         const Path::Vertex& vertex);
 
+template<>
+Vec3 evaluateBsdfWeight(
+        const Scene& scene,
+        const bsdf::Disney& bsdf,
+        const pdf::Disney& pdf,
+        const Vec3& inDir,
+        const Vec3& outDir,
+        const Path::Vertex& vertex);
+
 inline Vec3 evaluateBsdfWeight(
         const Scene& scene,
         const BSDF& bsdf,
@@ -307,14 +395,8 @@ inline Vec3 evaluateBsdfWeight(
         const Path::Vertex& vertex) {
     return std::visit(
         [&](const auto& bsdfValue, const auto& pdfValue) -> Vec3 {
-            if constexpr (std::is_same_v<
-                    std::decay_t<decltype(pdfValue)>, pdf::Delta>) {
-                assert(false && "Delta pdf is not supported");
-                return Vec3(0.0f);
-            } else {
-                return evaluateBsdfWeight(
-                    scene, bsdfValue, pdfValue, inDir, outDir, vertex);
-            }
+            return evaluateBsdfWeight(
+                scene, bsdfValue, pdfValue, inDir, outDir, vertex);
         },
         bsdf, pdf);
 }

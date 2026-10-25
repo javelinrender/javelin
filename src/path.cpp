@@ -123,7 +123,7 @@ std::optional<Ray> Path::addBounce(
     if (length2(newDirection) == 0.0f)
         return std::nullopt;
 
-    last().bounceType = javelin::materials::bounceType(material.surfaceBsdf());
+    last().bounceType = material.getType();
     return Ray(last().offsetPosition(newDirection), newDirection);
 }
 

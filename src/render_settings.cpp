@@ -15,12 +15,32 @@ namespace javelin {
 bool ShaderballMaterialParameters::hasAnisotropy(
         const RenderSettings& settings) {
     const Bsdf bsdf = settings.shaderballMaterial.bsdf.value;
-    return bsdf == Bsdf::DisneyMetal || bsdf == Bsdf::DisneyGlass;
+    return bsdf == Bsdf::DisneyMetal || bsdf == Bsdf::DisneyGlass ||
+        bsdf == Bsdf::DisneyBSDF;
 }
 
 bool ShaderballMaterialParameters::isDisneyGlass(
         const RenderSettings& settings) {
     return settings.shaderballMaterial.bsdf.value == Bsdf::DisneyGlass;
+}
+
+bool ShaderballMaterialParameters::isDisneySheen(
+        const RenderSettings& settings) {
+    return settings.shaderballMaterial.bsdf.value == Bsdf::DisneySheen;
+}
+
+bool ShaderballMaterialParameters::isDisneyBSDF(
+        const RenderSettings& settings) {
+    return settings.shaderballMaterial.bsdf.value == Bsdf::DisneyBSDF;
+}
+
+
+bool ShaderballMaterialParameters::hasIor(const RenderSettings& settings) {
+    return isDisneyGlass(settings) || isDisneyBSDF(settings);
+}
+
+bool ShaderballMaterialParameters::hasSheenTint(const RenderSettings& settings) {
+    return isDisneySheen(settings) || isDisneyBSDF(settings);
 }
 
 namespace {

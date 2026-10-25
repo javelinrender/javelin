@@ -54,9 +54,7 @@ void Application::applyShaderballMaterial() {
         shaderball.baseColorB.value,
         1.0f);
     const float roughness = shaderball.roughness.value;
-    const bool hasAnisotropy =
-        shaderball.bsdf.value == Parameters::Bsdf::DisneyMetal ||
-        shaderball.bsdf.value == Parameters::Bsdf::DisneyGlass;
+    const bool hasAnisotropy = Parameters::hasAnisotropy(_settings);
     const float anisotropy = hasAnisotropy ? shaderball.anisotropy.value : 0.0f;
     const float ior = shaderball.ior.value;
 
@@ -83,6 +81,24 @@ void Application::applyShaderballMaterial() {
             .anisotropyFactor = anisotropy,
             .ior = ior};
         break;
+    case Parameters::Bsdf::DisneySheen:
+        bsdf = materials::bsdf::DisneySheen{
+            .baseColorFactor = baseColor,
+            .sheenTintFactor = shaderball.sheenTint.value};
+        break;
+    case Parameters::Bsdf::DisneyBSDF:
+        bsdf = materials::bsdf::Disney{
+            .baseColorFactor = baseColor,
+            .roughnessFactor = roughness,
+            .anisotropyFactor = anisotropy,
+            .metallicFactor = shaderball.metallic.value,
+            .specularTransmissionFactor = shaderball.specularTransmission.value,
+            .specularFactor = shaderball.specular.value,
+            .specularTintFactor = shaderball.specularTint.value,
+            .sheenFactor = shaderball.sheen.value,
+            .sheenTintFactor = shaderball.sheenTint.value,
+            .ior = ior};
+        break;
     }
 
     materials::PDF pdf;
@@ -102,6 +118,14 @@ void Application::applyShaderballMaterial() {
         pdf = materials::pdf::GGXVNDFGlass{
             .roughnessFactor = roughness,
             .anisotropyFactor = anisotropy,
+            .ior = ior};
+        break;
+    case Parameters::Pdf::DisneyBSDF:
+        pdf = materials::pdf::Disney{
+            .roughnessFactor = roughness,
+            .anisotropyFactor = anisotropy,
+            .metallicFactor = shaderball.metallic.value,
+            .specularTransmissionFactor = shaderball.specularTransmission.value,
             .ior = ior};
         break;
     }
