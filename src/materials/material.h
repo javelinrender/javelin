@@ -8,6 +8,7 @@
 #include <variant>
 
 #include "path.h"
+#include "texture.h"
 #include "types.h"
 
 class Scene;
@@ -17,86 +18,65 @@ namespace javelin::materials {
 namespace bsdf {
 
 struct LambertianDiffuse {
-    Vec4 baseColorFactor = Vec4(1.0f);
-    std::optional<std::size_t> baseColorTextureIdx;
+    ColorTexture baseColor = Vec3(1.0f);
 };
 
 struct DisneyDiffuse {
-    Vec4 baseColorFactor = Vec4(1.0f);
-    std::optional<std::size_t> baseColorTextureIdx;
+    ColorTexture baseColor = Vec3(1.0f);
 
-    float roughnessFactor = 1.0f;
-    std::optional<std::size_t> roughnessTextureIdx;
+    ScalarTexture roughness = 1.0f;
 };
 
 struct DisneyMetal {
-    Vec4 baseColorFactor = Vec4(1.0f);
-    std::optional<std::size_t> baseColorTextureIdx;
+    ColorTexture baseColor = Vec3(1.0f);
 
-    float roughnessFactor = 1.0f;
-    std::optional<std::size_t> roughnessTextureIdx;
+    ScalarTexture roughness = 1.0f;
 
-    float anisotropyFactor = 0.0f;
-    std::optional<std::size_t> anisotropyTextureIdx;
+    ScalarTexture anisotropy = 0.0f;
 };
 
 struct DisneySheen {
-    Vec4 baseColorFactor = Vec4(1.0f);
-    std::optional<std::size_t> baseColorTextureIdx;
+    ColorTexture baseColor = Vec3(1.0f);
 
-    float sheenTintFactor = 0.0f;
-    std::optional<std::size_t> sheenTintTextureIdx;
+    ScalarTexture sheenTint = 0.0f;
 };
 
 struct DisneyClearcoat {
-    Vec4 glossFactor = Vec4(1.0f);
-    std::optional<std::size_t> glossTextureIdx;
+    ScalarTexture gloss = 1.0f;
 };
 
 /// Rough dielectric (Disney 2015 glass lobe). `ior` is the index of refraction
 /// of the inside of the surface relative to the outside; the surface normals
 /// are assumed to point outwards.
 struct DisneyGlass {
-    Vec4 baseColorFactor = Vec4(1.0f);
-    std::optional<std::size_t> baseColorTextureIdx;
+    ColorTexture baseColor = Vec3(1.0f);
 
-    float roughnessFactor = 1.0f;
-    std::optional<std::size_t> roughnessTextureIdx;
+    ScalarTexture roughness = 1.0f;
 
-    float anisotropyFactor = 0.0f;
-    std::optional<std::size_t> anisotropyTextureIdx;
+    ScalarTexture anisotropy = 0.0f;
 
     float ior = 1.5f;
 };
 
 /// Disney principled BSDF
 struct Disney {
-    Vec4 baseColorFactor = Vec4(1.0f);
-    std::optional<std::size_t> baseColorTextureIdx;
+    ColorTexture baseColor = Vec3(1.0f);
 
-    float roughnessFactor = 1.0f;
-    std::optional<std::size_t> roughnessTextureIdx;
+    ScalarTexture roughness = 1.0f;
 
-    float anisotropyFactor = 0.0f;
-    std::optional<std::size_t> anisotropyTextureIdx;
+    ScalarTexture anisotropy = 0.0f;
 
-    float metallicFactor = 0.0f;
-    std::optional<std::size_t> metallicTextureIdx;
+    ScalarTexture metallic = 0.0f;
 
-    float specularTransmissionFactor = 0.0f;
-    std::optional<std::size_t> specularTransmissionTextureIdx;
+    ScalarTexture specularTransmission = 0.0f;
 
-    float specularFactor = 1.0f;
-    std::optional<std::size_t> specularTextureIdx;
+    ScalarTexture specular = 1.0f;
 
-    float specularTintFactor = 0.0f;
-    std::optional<std::size_t> specularTintTextureIdx;
+    ScalarTexture specularTint = 0.0f;
 
-    float sheenFactor = 0.0f;
-    std::optional<std::size_t> sheenTextureIdx;
+    ScalarTexture sheen = 0.0f;
 
-    float sheenTintFactor = 0.0f;
-    std::optional<std::size_t> sheenTintTextureIdx;
+    ScalarTexture sheenTint = 0.0f;
 
     float ior = 1.5f;
 };
@@ -110,37 +90,29 @@ struct Delta {};
 struct CosineWeighted {};
 
 struct GGXVNDF {
-    float roughnessFactor = 1.0f;
-    std::optional<std::size_t> roughnessTextureIdx;
+    ScalarTexture roughness = 1.0f;
 
-    float anisotropyFactor = 0.0f;
-    std::optional<std::size_t> anisotropyTextureIdx;
+    ScalarTexture anisotropy = 0.0f;
 };
 
 /// Samples a visible microfacet normal, then chooses between reflection and
 /// refraction proportionally to the dielectric Fresnel term.
 struct GGXVNDFGlass {
-    float roughnessFactor = 1.0f;
-    std::optional<std::size_t> roughnessTextureIdx;
+    ScalarTexture roughness = 1.0f;
 
-    float anisotropyFactor = 0.0f;
-    std::optional<std::size_t> anisotropyTextureIdx;
+    ScalarTexture anisotropy = 0.0f;
 
     float ior = 1.5f;
 };
 
 struct Disney {
-    float roughnessFactor = 1.0f;
-    std::optional<std::size_t> roughnessTextureIdx;
+    ScalarTexture roughness = 1.0f;
 
-    float anisotropyFactor = 0.0f;
-    std::optional<std::size_t> anisotropyTextureIdx;
+    ScalarTexture anisotropy = 0.0f;
 
-    float metallicFactor = 0.0f;
-    std::optional<std::size_t> metallicTextureIdx;
+    ScalarTexture metallic = 0.0f;
 
-    float specularTransmissionFactor = 0.0f;
-    std::optional<std::size_t> specularTransmissionTextureIdx;
+    ScalarTexture specularTransmission = 0.0f;
 
     float ior = 1.5f;
 };

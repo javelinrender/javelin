@@ -48,11 +48,10 @@ void Application::applyShaderballMaterial() {
     using Parameters = ShaderballMaterialParameters;
     namespace materials = javelin::materials;
     const Parameters& shaderball = _settings.shaderballMaterial;
-    const Vec4 baseColor(
+    const Vec3 baseColor(
         shaderball.baseColorR.value,
         shaderball.baseColorG.value,
-        shaderball.baseColorB.value,
-        1.0f);
+        shaderball.baseColorB.value);
     const float roughness = shaderball.roughness.value;
     const bool hasAnisotropy = Parameters::hasAnisotropy(_settings);
     const float anisotropy = hasAnisotropy ? shaderball.anisotropy.value : 0.0f;
@@ -61,42 +60,42 @@ void Application::applyShaderballMaterial() {
     materials::BSDF bsdf;
     switch (shaderball.bsdf.value) {
     case Parameters::Bsdf::LambertianDiffuse:
-        bsdf = materials::bsdf::LambertianDiffuse{.baseColorFactor = baseColor};
+        bsdf = materials::bsdf::LambertianDiffuse{.baseColor = baseColor};
         break;
     case Parameters::Bsdf::DisneyDiffuse:
         bsdf = materials::bsdf::DisneyDiffuse{
-            .baseColorFactor = baseColor,
-            .roughnessFactor = roughness};
+            .baseColor = baseColor,
+            .roughness = roughness};
         break;
     case Parameters::Bsdf::DisneyMetal:
         bsdf = materials::bsdf::DisneyMetal{
-            .baseColorFactor = baseColor,
-            .roughnessFactor = roughness,
-            .anisotropyFactor = anisotropy};
+            .baseColor = baseColor,
+            .roughness = roughness,
+            .anisotropy = anisotropy};
         break;
     case Parameters::Bsdf::DisneyGlass:
         bsdf = materials::bsdf::DisneyGlass{
-            .baseColorFactor = baseColor,
-            .roughnessFactor = roughness,
-            .anisotropyFactor = anisotropy,
+            .baseColor = baseColor,
+            .roughness = roughness,
+            .anisotropy = anisotropy,
             .ior = ior};
         break;
     case Parameters::Bsdf::DisneySheen:
         bsdf = materials::bsdf::DisneySheen{
-            .baseColorFactor = baseColor,
-            .sheenTintFactor = shaderball.sheenTint.value};
+            .baseColor = baseColor,
+            .sheenTint = shaderball.sheenTint.value};
         break;
     case Parameters::Bsdf::DisneyBSDF:
         bsdf = materials::bsdf::Disney{
-            .baseColorFactor = baseColor,
-            .roughnessFactor = roughness,
-            .anisotropyFactor = anisotropy,
-            .metallicFactor = shaderball.metallic.value,
-            .specularTransmissionFactor = shaderball.specularTransmission.value,
-            .specularFactor = shaderball.specular.value,
-            .specularTintFactor = shaderball.specularTint.value,
-            .sheenFactor = shaderball.sheen.value,
-            .sheenTintFactor = shaderball.sheenTint.value,
+            .baseColor = baseColor,
+            .roughness = roughness,
+            .anisotropy = anisotropy,
+            .metallic = shaderball.metallic.value,
+            .specularTransmission = shaderball.specularTransmission.value,
+            .specular = shaderball.specular.value,
+            .specularTint = shaderball.specularTint.value,
+            .sheen = shaderball.sheen.value,
+            .sheenTint = shaderball.sheenTint.value,
             .ior = ior};
         break;
     }
@@ -111,21 +110,21 @@ void Application::applyShaderballMaterial() {
         break;
     case Parameters::Pdf::GGXVNDF:
         pdf = materials::pdf::GGXVNDF{
-            .roughnessFactor = roughness,
-            .anisotropyFactor = anisotropy};
+            .roughness = roughness,
+            .anisotropy = anisotropy};
         break;
     case Parameters::Pdf::GGXVNDFGlass:
         pdf = materials::pdf::GGXVNDFGlass{
-            .roughnessFactor = roughness,
-            .anisotropyFactor = anisotropy,
+            .roughness = roughness,
+            .anisotropy = anisotropy,
             .ior = ior};
         break;
     case Parameters::Pdf::DisneyBSDF:
         pdf = materials::pdf::Disney{
-            .roughnessFactor = roughness,
-            .anisotropyFactor = anisotropy,
-            .metallicFactor = shaderball.metallic.value,
-            .specularTransmissionFactor = shaderball.specularTransmission.value,
+            .roughness = roughness,
+            .anisotropy = anisotropy,
+            .metallic = shaderball.metallic.value,
+            .specularTransmission = shaderball.specularTransmission.value,
             .ior = ior};
         break;
     }

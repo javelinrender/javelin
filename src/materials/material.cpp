@@ -40,27 +40,22 @@ T schlick(const T& f0, const T& f90, float cosTheta) {
 }
 
 // Roughness and anisotropy mapped to (alpha_x, alpha_y).
-Vec2 ggxAlpha(
-        const Scene& scene,
-        float roughnessFactor,
-        std::optional<std::size_t> roughnessTextureIdx,
-        float anisotropyFactor,
-        std::optional<std::size_t> anisotropyTextureIdx,
-        const Vec2& textureCoord) {
+Vec2 ggxAlpha(float roughness, float anisotropy) {
     constexpr float AlphaMin = 0.0001f;
-
-    float roughness = roughnessFactor;
-    if (roughnessTextureIdx)
-        roughness *= scene.sampleTexture(*roughnessTextureIdx, textureCoord).y;
-
-    float anisotropy = anisotropyFactor;
-    if (anisotropyTextureIdx)
-        anisotropy *= scene.sampleTexture(*anisotropyTextureIdx, textureCoord).z;
-
     const float aspect = std::sqrt(1.0f - 0.9f * anisotropy);
     return Vec2(
         std::max(AlphaMin, roughness * roughness / aspect),
         std::max(AlphaMin, roughness * roughness * aspect));
+}
+
+Vec2 ggxAlpha(
+        const Scene& scene,
+        const ScalarTexture& roughness,
+        const ScalarTexture& anisotropy,
+        const Vec2& textureCoord) {
+    return ggxAlpha(
+        roughness.sample(scene, textureCoord),
+        anisotropy.sample(scene, textureCoord));
 }
 
 // Anisotropic GGX normal distribution; `hl` is in the local frame.
@@ -206,18 +201,6 @@ float glassPdf(const GlassConfiguration& config) {
     return visible * (1.0f - config.fresnel) * jacobian;
 }
 
-Vec3 glassBaseColor(
-        const Scene& scene,
-        const bsdf::DisneyGlass& bsdf,
-        const Path::Vertex& vertex) {
-    Vec3 baseColor = bsdf.baseColorFactor.xyz();
-    if (bsdf.baseColorTextureIdx)
-        baseColor *= scene.sampleTexture(
-            *bsdf.baseColorTextureIdx, vertex.textureCoord);
-    return baseColor;
-}
-
-
 bool disneyOutside(const Vec3& inDir, const Path::Vertex& vertex) {
     const Vec3 outwardGeometric =
         vertex.backFace ? -vertex.geometricNormal : vertex.geometricNormal;
@@ -237,30 +220,72 @@ bool disneyDirectionsValid(
         (cosOut > 0.0f) == (geometricProduct > 0.0f);
 }
 
+/// The Disney parameters that are shared by the bsdf and pdf, sampled from
+/// their textures and clamped to their valid ranges.
+struct DisneyParameters {
+    float roughness;
+    float anisotropy;
+    float metallic;
+    float specularTransmission;
+    float ior;
+};
+
+/// Works for both `bsdf::Disney` and `pdf::Disney`.
+template<typename T>
+DisneyParameters resolveDisneyParameters(
+        const Scene& scene, const T& source, const Path::Vertex& vertex) {
+    const auto sample = [&](const auto& texture) {
+        return std::clamp(texture.sample(scene, vertex.textureCoord), 0.0f, 1.0f);
+    };
+    return {
+        .roughness = sample(source.roughness),
+        .anisotropy = sample(source.anisotropy),
+        .metallic = sample(source.metallic),
+        .specularTransmission = sample(source.specularTransmission),
+        .ior = source.ior};
+}
+
 /// Physical lobe weights, not normalized sampling probabilities.
 /// @{
-float disneyDiffuseWeight(const pdf::Disney& parameters) {
-    return (1.0f - parameters.metallicFactor) *
-        (1.0f - parameters.specularTransmissionFactor);
+float disneyDiffuseWeight(const DisneyParameters& parameters) {
+    return (1.0f - parameters.metallic) * (1.0f - parameters.specularTransmission);
 }
-float disneyGlassWeight(const pdf::Disney& parameters) {
-    return (1.0f - parameters.metallicFactor) * parameters.specularTransmissionFactor;
+float disneyGlassWeight(const DisneyParameters& parameters) {
+    return (1.0f - parameters.metallic) * parameters.specularTransmission;
 }
-float disneyMetalWeight(const pdf::Disney& parameters) {
+float disneyMetalWeight(const DisneyParameters& parameters) {
     return 1.0f - disneyGlassWeight(parameters);
 }
 float disneySheenWeight(
         const Scene& scene,
         const bsdf::Disney& bsdf,
-        const pdf::Disney& parameters,
+        const DisneyParameters& parameters,
         const Path::Vertex& vertex) {
-    float sheen = bsdf.sheenFactor;
-    if (bsdf.sheenTextureIdx)
-        sheen *= scene.sampleTexture(*bsdf.sheenTextureIdx, vertex.textureCoord).x;
-    sheen = std::clamp(sheen, 0.0f, 1.0f);
-    return (1.0f - parameters.metallicFactor) * sheen;
+    const float sheen = std::clamp(
+        bsdf.sheen.sample(scene, vertex.textureCoord), 0.0f, 1.0f);
+    return (1.0f - parameters.metallic) * sheen;
 }
 /// @}
+
+/// Which lobes of the Disney bsdf are active for the given incoming direction.
+struct DisneyLobes {
+    /// x: diffuse, y: metal, z: glass.
+    Vec3 weights;
+    bool outside;
+};
+
+DisneyLobes disneyLobes(
+        const DisneyParameters& parameters,
+        const Vec3& inDir,
+        const Path::Vertex& vertex) {
+    const bool outside = disneyOutside(inDir, vertex);
+    return {
+        Vec3(
+            outside ? disneyDiffuseWeight(parameters) : 0.0f,
+            outside ? disneyMetalWeight(parameters) : 0.0f,
+            disneyGlassWeight(parameters)),
+        outside};
+}
 
 Vec3 ggxReflection(
         const Vec3& f0,
@@ -286,11 +311,7 @@ Vec3 evaluateBsdf<bsdf::LambertianDiffuse>(
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex) {
-    Vec3 result = (1.0f / PI) * bsdf.baseColorFactor.rgb();
-    if (bsdf.baseColorTextureIdx)
-        result *= scene.sampleTexture(
-            *bsdf.baseColorTextureIdx, vertex.textureCoord);
-    return result;
+    return (1.0f / PI) * bsdf.baseColor.sample(scene, vertex.textureCoord);
 }
 
 template<>
@@ -349,15 +370,9 @@ Vec3 evaluateBsdf<bsdf::DisneyDiffuse>(
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex) {
-    Vec3 baseColor = bsdf.baseColorFactor.xyz();
-    if (bsdf.baseColorTextureIdx)
-        baseColor *= scene.sampleTexture(
-            *bsdf.baseColorTextureIdx, vertex.textureCoord);
+    const Vec3 baseColor = bsdf.baseColor.sample(scene, vertex.textureCoord);
 
-    float roughness = bsdf.roughnessFactor;
-    if (bsdf.roughnessTextureIdx)
-        roughness *= scene.sampleTexture(
-            *bsdf.roughnessTextureIdx, vertex.textureCoord).y;
+    const float roughness = bsdf.roughness.sample(scene, vertex.textureCoord);
 
     const Vec3 h = normalize(inDir + outDir);
     const float hDotOut = dot(h, outDir);
@@ -377,15 +392,9 @@ Vec3 evaluateBsdf<bsdf::DisneySheen>(
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex) {
-    Vec3 baseColor = bsdf.baseColorFactor.xyz();
-    if (bsdf.baseColorTextureIdx)
-        baseColor *= scene.sampleTexture(
-            *bsdf.baseColorTextureIdx, vertex.textureCoord);
+    const Vec3 baseColor = bsdf.baseColor.sample(scene, vertex.textureCoord);
 
-    float sheenTint = bsdf.sheenTintFactor;
-    if (bsdf.sheenTintTextureIdx)
-        sheenTint *= scene.sampleTexture(
-            *bsdf.sheenTintTextureIdx, vertex.textureCoord).x;
+    const float sheenTint = bsdf.sheenTint.sample(scene, vertex.textureCoord);
 
     const Vec3 h = normalize(inDir + outDir);
     const float lum = luminance(baseColor);
@@ -402,16 +411,10 @@ Vec3 evaluateBsdf<bsdf::DisneyMetal>(
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex) {
-    Vec3 baseColor = bsdf.baseColorFactor.xyz();
-    if (bsdf.baseColorTextureIdx)
-        baseColor *= scene.sampleTexture(
-            *bsdf.baseColorTextureIdx, vertex.textureCoord);
+    const Vec3 baseColor = bsdf.baseColor.sample(scene, vertex.textureCoord);
 
     const Vec2 alpha = detail::ggxAlpha(
-        scene,
-        bsdf.roughnessFactor, bsdf.roughnessTextureIdx,
-        bsdf.anisotropyFactor, bsdf.anisotropyTextureIdx,
-        vertex.textureCoord);
+        scene, bsdf.roughness, bsdf.anisotropy, vertex.textureCoord);
 
     return detail::ggxReflection(baseColor, alpha, inDir, outDir, vertex.normal);
 }
@@ -423,10 +426,7 @@ Vec3 samplePdf<pdf::GGXVNDF>(
         const Vec3& inDir,
         const Path::Vertex& vertex) {
     const Vec2 alpha = detail::ggxAlpha(
-        scene,
-        pdf.roughnessFactor, pdf.roughnessTextureIdx,
-        pdf.anisotropyFactor, pdf.anisotropyTextureIdx,
-        vertex.textureCoord);
+        scene, pdf.roughness, pdf.anisotropy, vertex.textureCoord);
 
     const Vec3 inLocal = detail::toLocal(inDir, vertex.normal);
     const float u1 = PCG32::rand();
@@ -449,10 +449,7 @@ float evaluatePdf<pdf::GGXVNDF>(
         return 0.0f;
 
     const Vec2 alpha = detail::ggxAlpha(
-        scene,
-        pdf.roughnessFactor, pdf.roughnessTextureIdx,
-        pdf.anisotropyFactor, pdf.anisotropyTextureIdx,
-        vertex.textureCoord);
+        scene, pdf.roughness, pdf.anisotropy, vertex.textureCoord);
 
     const Vec3 hl = normalize(inLocal + outLocal);
     // D_vis(h) / (4 (in . h)) with D_vis = G1(in) max(0, in . h) D(h) / (in . n).
@@ -468,16 +465,13 @@ Vec3 evaluateBsdf<bsdf::DisneyGlass>(
         const Vec3& outDir,
         const Path::Vertex& vertex) {
     const Vec2 alpha = detail::ggxAlpha(
-        scene,
-        bsdf.roughnessFactor, bsdf.roughnessTextureIdx,
-        bsdf.anisotropyFactor, bsdf.anisotropyTextureIdx,
-        vertex.textureCoord);
+        scene, bsdf.roughness, bsdf.anisotropy, vertex.textureCoord);
     const detail::GlassConfiguration config =
         detail::glassConfiguration(inDir, outDir, vertex, bsdf.ior, alpha);
     if (!config.valid)
         return Vec3(0.0f);
 
-    const Vec3 baseColor = detail::glassBaseColor(scene, bsdf, vertex);
+    const Vec3 baseColor = bsdf.baseColor.sample(scene, vertex.textureCoord);
     const float d = detail::ggxD(config.h, alpha);
     const float g = detail::smithG1(config.inLocal, alpha) *
         detail::smithG1(config.outLocal, alpha);
@@ -503,10 +497,7 @@ Vec3 samplePdf<pdf::GGXVNDFGlass>(
         const Vec3& inDir,
         const Path::Vertex& vertex) {
     const Vec2 alpha = detail::ggxAlpha(
-        scene,
-        pdf.roughnessFactor, pdf.roughnessTextureIdx,
-        pdf.anisotropyFactor, pdf.anisotropyTextureIdx,
-        vertex.textureCoord);
+        scene, pdf.roughness, pdf.anisotropy, vertex.textureCoord);
 
     const detail::GlassFrame frame = detail::glassFrame(inDir, vertex, pdf.ior);
     const Vec3 inLocal = detail::toLocal(inDir, frame.normal);
@@ -545,10 +536,7 @@ float evaluatePdf<pdf::GGXVNDFGlass>(
         const Vec3& outDir,
         const Path::Vertex& vertex) {
     const Vec2 alpha = detail::ggxAlpha(
-        scene,
-        pdf.roughnessFactor, pdf.roughnessTextureIdx,
-        pdf.anisotropyFactor, pdf.anisotropyTextureIdx,
-        vertex.textureCoord);
+        scene, pdf.roughness, pdf.anisotropy, vertex.textureCoord);
     const detail::GlassConfiguration config =
         detail::glassConfiguration(inDir, outDir, vertex, pdf.ior, alpha);
     return config.valid ? detail::glassPdf(config) : 0.0f;
@@ -559,75 +547,59 @@ namespace detail {
 Vec3 evaluateDisneyBsdf(
         const Scene& scene,
         const bsdf::Disney& bsdf,
-        const pdf::Disney& parameters,
-        const Vec3& weights,
-        bool outside,
+        const DisneyParameters& parameters,
+        const DisneyLobes& lobes,
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex) {
-    const detail::GlassFrame frame = detail::glassFrame(inDir, vertex, bsdf.ior);
+    const Vec3& weights = lobes.weights;
+    const GlassFrame frame = glassFrame(inDir, vertex, bsdf.ior);
     const float cosOut = dot(frame.normal, outDir);
-    if (!detail::disneyDirectionsValid(inDir, outDir, frame.normal, vertex))
+    if (!disneyDirectionsValid(inDir, outDir, frame.normal, vertex))
         return Vec3(0.0f);
 
-    Vec3 baseColor = bsdf.baseColorFactor.xyz();
-    if (bsdf.baseColorTextureIdx)
-        baseColor *= scene.sampleTexture(
-            *bsdf.baseColorTextureIdx, vertex.textureCoord);
+    const Vec3 baseColor = bsdf.baseColor.sample(scene, vertex.textureCoord);
 
     Vec3 result(0.0f);
     if (weights.z > 0.0f) {
         const bsdf::DisneyGlass glass{
-            .baseColorFactor = Vec4(baseColor, 1.0f),
-            .roughnessFactor = parameters.roughnessFactor,
-            .anisotropyFactor = parameters.anisotropyFactor,
+            .baseColor = baseColor,
+            .roughness = parameters.roughness,
+            .anisotropy = parameters.anisotropy,
             .ior = parameters.ior};
         result += weights.z * evaluateBsdf(scene, glass, inDir, outDir, vertex);
     }
-    if (!outside || cosOut <= 0.0f)
+    if (!lobes.outside || cosOut <= 0.0f)
         return result;
 
-    const bsdf::DisneyDiffuse diffuse{
-        .baseColorFactor = Vec4(baseColor, 1.0f),
-        .roughnessFactor = parameters.roughnessFactor};
-    if (weights.x > 0.0f)
+    if (weights.x > 0.0f) {
+        const bsdf::DisneyDiffuse diffuse{
+            .baseColor = baseColor, .roughness = parameters.roughness};
         result += weights.x * evaluateBsdf(scene, diffuse, inDir, outDir, vertex);
+    }
 
-    const float sheenWeight = detail::disneySheenWeight(
-        scene, bsdf, parameters, vertex);
+    const float sheenWeight = disneySheenWeight(scene, bsdf, parameters, vertex);
     if (sheenWeight > 0.0f) {
-        float sheenTint = bsdf.sheenTintFactor;
-        if (bsdf.sheenTintTextureIdx)
-            sheenTint *= scene.sampleTexture(
-                *bsdf.sheenTintTextureIdx, vertex.textureCoord).x;
-        sheenTint = std::clamp(sheenTint, 0.0f, 1.0f);
         const bsdf::DisneySheen sheenBsdf{
-            .baseColorFactor = Vec4(baseColor, 1.0f),
-            .sheenTintFactor = sheenTint};
+            .baseColor = baseColor,
+            .sheenTint = std::clamp(
+                bsdf.sheenTint.sample(scene, vertex.textureCoord), 0.0f, 1.0f)};
         result += sheenWeight * evaluateBsdf(scene, sheenBsdf, inDir, outDir, vertex);
     }
 
     if (weights.y > 0.0f) {
-        float specular = bsdf.specularFactor;
-        if (bsdf.specularTextureIdx)
-            specular *= scene.sampleTexture(
-                *bsdf.specularTextureIdx, vertex.textureCoord).x;
-        specular = std::clamp(specular, 0.0f, 1.0f);
-        float specularTint = bsdf.specularTintFactor;
-        if (bsdf.specularTintTextureIdx)
-            specularTint *= scene.sampleTexture(
-                *bsdf.specularTintTextureIdx, vertex.textureCoord).x;
-        specularTint = std::clamp(specularTint, 0.0f, 1.0f);
+        const float specular = std::clamp(
+            bsdf.specular.sample(scene, vertex.textureCoord), 0.0f, 1.0f);
+        const float specularTint = std::clamp(
+            bsdf.specularTint.sample(scene, vertex.textureCoord), 0.0f, 1.0f);
         const float lum = luminance(baseColor);
         const Vec3 tint = lum > 0.0f ? baseColor / lum : Vec3(1.0f);
         const Vec3 ks = (1.0f - specularTint) * Vec3(1.0f) + specularTint * tint;
         const float r = (bsdf.ior - 1.0f) / (bsdf.ior + 1.0f);
-        const Vec3 f0 = specular * r * r * (1.0f - parameters.metallicFactor) * ks +
-            parameters.metallicFactor * baseColor;
-        const Vec2 alpha = detail::ggxAlpha(scene,
-            parameters.roughnessFactor, std::nullopt,
-            parameters.anisotropyFactor, std::nullopt, vertex.textureCoord);
-        result += weights.y * detail::ggxReflection(
+        const Vec3 f0 = specular * r * r * (1.0f - parameters.metallic) * ks +
+            parameters.metallic * baseColor;
+        const Vec2 alpha = ggxAlpha(parameters.roughness, parameters.anisotropy);
+        result += weights.y * ggxReflection(
             f0, alpha, inDir, outDir, frame.normal);
     }
     return result;
@@ -635,15 +607,16 @@ Vec3 evaluateDisneyBsdf(
 
 Vec3 sampleDisneyPdf(
         const Scene& scene,
-        const pdf::Disney& parameters,
-        const Vec3& weights,
+        const DisneyParameters& parameters,
+        const DisneyLobes& lobes,
         const Vec3& inDir,
         const Path::Vertex& vertex) {
+    const Vec3& weights = lobes.weights;
     const float total = weights.x + weights.y + weights.z;
     if (!(total > 0.0f))
         return Vec3(0.0f);
 
-    const detail::GlassFrame frame = detail::glassFrame(inDir, vertex, parameters.ior);
+    const GlassFrame frame = glassFrame(inDir, vertex, parameters.ior);
     if (dot(frame.normal, inDir) <= 0.0f)
         return Vec3(0.0f);
     Path::Vertex reflectionVertex = vertex;
@@ -655,60 +628,60 @@ Vec3 sampleDisneyPdf(
         outDir = samplePdf(scene, pdf::CosineWeighted{}, inDir, reflectionVertex);
     } else if (choice < weights.x + weights.y) {
         const pdf::GGXVNDF reflection{
-            .roughnessFactor = parameters.roughnessFactor,
-            .anisotropyFactor = parameters.anisotropyFactor};
+            .roughness = parameters.roughness,
+            .anisotropy = parameters.anisotropy};
         outDir = samplePdf(scene, reflection, inDir, reflectionVertex);
         if (dot(frame.normal, outDir) <= 0.0f)
             return Vec3(0.0f);
     } else {
         const pdf::GGXVNDFGlass glass{
-            .roughnessFactor = parameters.roughnessFactor,
-            .anisotropyFactor = parameters.anisotropyFactor,
+            .roughness = parameters.roughness,
+            .anisotropy = parameters.anisotropy,
             .ior = parameters.ior};
         // The glass sampler draws its own independent Fresnel decision.
         outDir = samplePdf(scene, glass, inDir, vertex);
     }
 
-    if (!detail::disneyDirectionsValid(inDir, outDir, frame.normal, vertex))
+    if (!disneyDirectionsValid(inDir, outDir, frame.normal, vertex))
         return Vec3(0.0f);
     return outDir;
 }
 
 float evaluateDisneyPdf(
         const Scene& scene,
-        const pdf::Disney& parameters,
-        const Vec3& weights,
-        bool outside,
+        const DisneyParameters& parameters,
+        const DisneyLobes& lobes,
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex) {
+    const Vec3& weights = lobes.weights;
     const float total = weights.x + weights.y + weights.z;
     if (!(total > 0.0f))
         return 0.0f;
 
-    const detail::GlassFrame frame = detail::glassFrame(inDir, vertex, parameters.ior);
+    const GlassFrame frame = glassFrame(inDir, vertex, parameters.ior);
     const float cosOut = dot(frame.normal, outDir);
-    if (!detail::disneyDirectionsValid(inDir, outDir, frame.normal, vertex))
+    if (!disneyDirectionsValid(inDir, outDir, frame.normal, vertex))
         return 0.0f;
     Path::Vertex reflectionVertex = vertex;
     reflectionVertex.normal = frame.normal;
 
     float density = 0.0f;
-    if (outside && cosOut > 0.0f) {
+    if (lobes.outside && cosOut > 0.0f) {
         density += weights.x * evaluatePdf(
             scene, pdf::CosineWeighted{}, inDir, outDir, reflectionVertex);
         if (weights.y > 0.0f) {
             const pdf::GGXVNDF reflection{
-                .roughnessFactor = parameters.roughnessFactor,
-                .anisotropyFactor = parameters.anisotropyFactor};
+                .roughness = parameters.roughness,
+                .anisotropy = parameters.anisotropy};
             density += weights.y * evaluatePdf(
                 scene, reflection, inDir, outDir, reflectionVertex);
         }
     }
     if (weights.z > 0.0f) {
         const pdf::GGXVNDFGlass glass{
-            .roughnessFactor = parameters.roughnessFactor,
-            .anisotropyFactor = parameters.anisotropyFactor,
+            .roughness = parameters.roughness,
+            .anisotropy = parameters.anisotropy,
             .ior = parameters.ior};
         density += weights.z * evaluatePdf(scene, glass, inDir, outDir, vertex);
     }
@@ -724,35 +697,12 @@ Vec3 evaluateBsdf<bsdf::Disney>(
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex) {
-    float roughness = bsdf.roughnessFactor;
-    if (bsdf.roughnessTextureIdx)
-        roughness *= scene.sampleTexture(
-            *bsdf.roughnessTextureIdx, vertex.textureCoord).y;
-    float anisotropy = bsdf.anisotropyFactor;
-    if (bsdf.anisotropyTextureIdx)
-        anisotropy *= scene.sampleTexture(
-            *bsdf.anisotropyTextureIdx, vertex.textureCoord).z;
-    float metallic = bsdf.metallicFactor;
-    if (bsdf.metallicTextureIdx)
-        metallic *= scene.sampleTexture(
-            *bsdf.metallicTextureIdx, vertex.textureCoord).z;
-    float specularTransmission = bsdf.specularTransmissionFactor;
-    if (bsdf.specularTransmissionTextureIdx)
-        specularTransmission *= scene.sampleTexture(
-            *bsdf.specularTransmissionTextureIdx, vertex.textureCoord).x;
-    const pdf::Disney parameters{
-        .roughnessFactor = std::clamp(roughness, 0.0f, 1.0f),
-        .anisotropyFactor = std::clamp(anisotropy, 0.0f, 1.0f),
-        .metallicFactor = std::clamp(metallic, 0.0f, 1.0f),
-        .specularTransmissionFactor = std::clamp(specularTransmission, 0.0f, 1.0f),
-        .ior = bsdf.ior};
-    const bool outside = detail::disneyOutside(inDir, vertex);
-    const Vec3 weights(
-        outside ? detail::disneyDiffuseWeight(parameters) : 0.0f,
-        outside ? detail::disneyMetalWeight(parameters) : 0.0f,
-        detail::disneyGlassWeight(parameters));
+    const detail::DisneyParameters parameters =
+        detail::resolveDisneyParameters(scene, bsdf, vertex);
+    const detail::DisneyLobes lobes =
+        detail::disneyLobes(parameters, inDir, vertex);
     return detail::evaluateDisneyBsdf(
-        scene, bsdf, parameters, weights, outside, inDir, outDir, vertex);
+        scene, bsdf, parameters, lobes, inDir, outDir, vertex);
 }
 
 template<>
@@ -761,34 +711,11 @@ Vec3 samplePdf<pdf::Disney>(
         const pdf::Disney& pdf,
         const Vec3& inDir,
         const Path::Vertex& vertex) {
-    float roughness = pdf.roughnessFactor;
-    if (pdf.roughnessTextureIdx)
-        roughness *= scene.sampleTexture(
-            *pdf.roughnessTextureIdx, vertex.textureCoord).y;
-    float anisotropy = pdf.anisotropyFactor;
-    if (pdf.anisotropyTextureIdx)
-        anisotropy *= scene.sampleTexture(
-            *pdf.anisotropyTextureIdx, vertex.textureCoord).z;
-    float metallic = pdf.metallicFactor;
-    if (pdf.metallicTextureIdx)
-        metallic *= scene.sampleTexture(
-            *pdf.metallicTextureIdx, vertex.textureCoord).z;
-    float specularTransmission = pdf.specularTransmissionFactor;
-    if (pdf.specularTransmissionTextureIdx)
-        specularTransmission *= scene.sampleTexture(
-            *pdf.specularTransmissionTextureIdx, vertex.textureCoord).x;
-    const pdf::Disney parameters{
-        .roughnessFactor = std::clamp(roughness, 0.0f, 1.0f),
-        .anisotropyFactor = std::clamp(anisotropy, 0.0f, 1.0f),
-        .metallicFactor = std::clamp(metallic, 0.0f, 1.0f),
-        .specularTransmissionFactor = std::clamp(specularTransmission, 0.0f, 1.0f),
-        .ior = pdf.ior};
-    const bool outside = detail::disneyOutside(inDir, vertex);
-    const Vec3 weights(
-        outside ? detail::disneyDiffuseWeight(parameters) : 0.0f,
-        outside ? detail::disneyMetalWeight(parameters) : 0.0f,
-        detail::disneyGlassWeight(parameters));
-    return detail::sampleDisneyPdf(scene, parameters, weights, inDir, vertex);
+    const detail::DisneyParameters parameters =
+        detail::resolveDisneyParameters(scene, pdf, vertex);
+    const detail::DisneyLobes lobes =
+        detail::disneyLobes(parameters, inDir, vertex);
+    return detail::sampleDisneyPdf(scene, parameters, lobes, inDir, vertex);
 }
 
 template<>
@@ -798,35 +725,12 @@ float evaluatePdf<pdf::Disney>(
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex) {
-    float roughness = pdf.roughnessFactor;
-    if (pdf.roughnessTextureIdx)
-        roughness *= scene.sampleTexture(
-            *pdf.roughnessTextureIdx, vertex.textureCoord).y;
-    float anisotropy = pdf.anisotropyFactor;
-    if (pdf.anisotropyTextureIdx)
-        anisotropy *= scene.sampleTexture(
-            *pdf.anisotropyTextureIdx, vertex.textureCoord).z;
-    float metallic = pdf.metallicFactor;
-    if (pdf.metallicTextureIdx)
-        metallic *= scene.sampleTexture(
-            *pdf.metallicTextureIdx, vertex.textureCoord).z;
-    float specularTransmission = pdf.specularTransmissionFactor;
-    if (pdf.specularTransmissionTextureIdx)
-        specularTransmission *= scene.sampleTexture(
-            *pdf.specularTransmissionTextureIdx, vertex.textureCoord).x;
-    const pdf::Disney parameters{
-        .roughnessFactor = std::clamp(roughness, 0.0f, 1.0f),
-        .anisotropyFactor = std::clamp(anisotropy, 0.0f, 1.0f),
-        .metallicFactor = std::clamp(metallic, 0.0f, 1.0f),
-        .specularTransmissionFactor = std::clamp(specularTransmission, 0.0f, 1.0f),
-        .ior = pdf.ior};
-    const bool outside = detail::disneyOutside(inDir, vertex);
-    const Vec3 weights(
-        outside ? detail::disneyDiffuseWeight(parameters) : 0.0f,
-        outside ? detail::disneyMetalWeight(parameters) : 0.0f,
-        detail::disneyGlassWeight(parameters));
+    const detail::DisneyParameters parameters =
+        detail::resolveDisneyParameters(scene, pdf, vertex);
+    const detail::DisneyLobes lobes =
+        detail::disneyLobes(parameters, inDir, vertex);
     return detail::evaluateDisneyPdf(
-        scene, parameters, weights, outside, inDir, outDir, vertex);
+        scene, parameters, lobes, inDir, outDir, vertex);
 }
 
 template<>
@@ -837,39 +741,17 @@ Vec3 evaluateBsdfWeight(
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex) {
-    float roughness = bsdf.roughnessFactor;
-    if (bsdf.roughnessTextureIdx)
-        roughness *= scene.sampleTexture(
-            *bsdf.roughnessTextureIdx, vertex.textureCoord).y;
-    float anisotropy = bsdf.anisotropyFactor;
-    if (bsdf.anisotropyTextureIdx)
-        anisotropy *= scene.sampleTexture(
-            *bsdf.anisotropyTextureIdx, vertex.textureCoord).z;
-    float metallic = bsdf.metallicFactor;
-    if (bsdf.metallicTextureIdx)
-        metallic *= scene.sampleTexture(
-            *bsdf.metallicTextureIdx, vertex.textureCoord).z;
-    float specularTransmission = bsdf.specularTransmissionFactor;
-    if (bsdf.specularTransmissionTextureIdx)
-        specularTransmission *= scene.sampleTexture(
-            *bsdf.specularTransmissionTextureIdx, vertex.textureCoord).x;
-    const pdf::Disney parameters{
-        .roughnessFactor = std::clamp(roughness, 0.0f, 1.0f),
-        .anisotropyFactor = std::clamp(anisotropy, 0.0f, 1.0f),
-        .metallicFactor = std::clamp(metallic, 0.0f, 1.0f),
-        .specularTransmissionFactor = std::clamp(specularTransmission, 0.0f, 1.0f),
-        .ior = bsdf.ior};
-    const bool outside = detail::disneyOutside(inDir, vertex);
-    const Vec3 weights(
-        outside ? detail::disneyDiffuseWeight(parameters) : 0.0f,
-        outside ? detail::disneyMetalWeight(parameters) : 0.0f,
-        detail::disneyGlassWeight(parameters));
+    // Assumes the pdf uses the same parameters as the bsdf.
+    const detail::DisneyParameters parameters =
+        detail::resolveDisneyParameters(scene, bsdf, vertex);
+    const detail::DisneyLobes lobes =
+        detail::disneyLobes(parameters, inDir, vertex);
     const float pdfValue = detail::evaluateDisneyPdf(
-        scene, parameters, weights, outside, inDir, outDir, vertex);
+        scene, parameters, lobes, inDir, outDir, vertex);
     if (!(pdfValue > 0.0f))
         return Vec3(0.0f);
     return detail::evaluateDisneyBsdf(
-        scene, bsdf, parameters, weights, outside, inDir, outDir, vertex) *
+        scene, bsdf, parameters, lobes, inDir, outDir, vertex) *
         std::abs(dot(vertex.normal, outDir)) / pdfValue;
 }
 
@@ -883,16 +765,13 @@ Vec3 evaluateBsdfWeight(
         const Vec3& outDir,
         const Path::Vertex& vertex) {
     const Vec2 alpha = detail::ggxAlpha(
-        scene,
-        bsdf.roughnessFactor, bsdf.roughnessTextureIdx,
-        bsdf.anisotropyFactor, bsdf.anisotropyTextureIdx,
-        vertex.textureCoord);
+        scene, bsdf.roughness, bsdf.anisotropy, vertex.textureCoord);
     const detail::GlassConfiguration config =
         detail::glassConfiguration(inDir, outDir, vertex, bsdf.ior, alpha);
     if (!config.valid)
         return Vec3(0.0f);
 
-    const Vec3 baseColor = detail::glassBaseColor(scene, bsdf, vertex);
+    const Vec3 baseColor = bsdf.baseColor.sample(scene, vertex.textureCoord);
     const float g1Out = detail::smithG1(config.outLocal, alpha);
     // f * |n . out| / pdf reduces to the albedo times G1(out) since D, G1(in)
     // and the Fresnel terms cancel. Refraction also scales the radiance by
@@ -910,11 +789,7 @@ Vec3 evaluateBsdfWeight(
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex) {
-    Vec3 result = bsdf.baseColorFactor.rgb();
-    if (bsdf.baseColorTextureIdx)
-        result *= scene.sampleTexture(
-            *bsdf.baseColorTextureIdx, vertex.textureCoord);
-    return result;
+    return bsdf.baseColor.sample(scene, vertex.textureCoord);
 }
 
 // Assumes the pdf uses the same roughness/anisotropy as the bsdf.
@@ -931,16 +806,10 @@ Vec3 evaluateBsdfWeight(
     if (inLocal.z <= 0.0f || outLocal.z <= 0.0f)
         return Vec3(0.0f);
 
-    Vec3 baseColor = bsdf.baseColorFactor.xyz();
-    if (bsdf.baseColorTextureIdx)
-        baseColor *= scene.sampleTexture(
-            *bsdf.baseColorTextureIdx, vertex.textureCoord);
+    const Vec3 baseColor = bsdf.baseColor.sample(scene, vertex.textureCoord);
 
     const Vec2 alpha = detail::ggxAlpha(
-        scene,
-        bsdf.roughnessFactor, bsdf.roughnessTextureIdx,
-        bsdf.anisotropyFactor, bsdf.anisotropyTextureIdx,
-        vertex.textureCoord);
+        scene, bsdf.roughness, bsdf.anisotropy, vertex.textureCoord);
 
     const Vec3 h = normalize(inDir + outDir);
     const Vec3 fm = detail::schlick(baseColor, Vec3(1.0f), dot(h, outDir));

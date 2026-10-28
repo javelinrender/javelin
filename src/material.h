@@ -18,15 +18,15 @@
 struct MaterialData {
     std::string name;
 
-    Texture<Vec3> baseColor = Vec3(1.0f);
+    ColorTexture baseColor = Vec3(1.0f);
 
-    Texture<float> metallic = 1.0f;
-    Texture<float> roughness = 1.0f;
+    ScalarTexture metallic = 1.0f;
+    ScalarTexture roughness = 1.0f;
 
-    Texture<Vec3> emissive = Vec3(0.0f);
+    ColorTexture emissive = Vec3(0.0f);
     float emissiveStrength = 1.0f;
 
-    Texture<float> transmission = 0.0f;
+    ScalarTexture transmission = 0.0f;
 
     float ior = 1.5f;
 

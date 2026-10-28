@@ -223,10 +223,8 @@ bool Scene::loadGltf(const std::filesystem::path& filePath) {
 
         // glTF has no extra parameters for Disney diffuse beyond these.
         newMaterial.bsdf = javelin::materials::bsdf::DisneyDiffuse{
-            .baseColorFactor = newMaterial.baseColorFactor,
-            .baseColorTextureIdx = newMaterial.baseColorTextureIdx,
-            .roughnessFactor = newMaterial.roughnessFactor,
-            .roughnessTextureIdx = newMaterial.metallicRoughnessTextureIdx};
+            .baseColor = newMaterial.baseColor,
+            .roughness = newMaterial.roughness};
 
         std::println(std::cout, "Loaded material name={}", material.name);
     }
