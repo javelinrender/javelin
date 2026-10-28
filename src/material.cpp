@@ -8,7 +8,6 @@
 
 #include "scene.h"
 #include "ray.h"
-#include "texture_impl.h"
 #include "types.h"
 
 namespace {

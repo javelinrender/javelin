@@ -61,7 +61,7 @@ struct MeshLight {
 
 using Light = std::variant<PointLight, MeshLight>;
 
-/// Maps a glTF texture to the image it samples.
+/// Maps a texture to the image it samples.
 struct TextureSource {
     std::size_t imageIdx;
 };
@@ -113,3 +113,5 @@ public:
         return getMaterial(mesh.primitives[primitiveIdx].materialIdx);
     }
 };
+
+#include "texture_impl.h"
