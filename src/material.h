@@ -11,31 +11,28 @@
 #include "path.h"
 #include "types.h"
 #include "random.h"
+#include "texture.h"
 
 
 struct MaterialData {
     std::string name;
 
-    Vec4 baseColorFactor = Vec4(1.0f);
-    std::optional<std::size_t> baseColorTextureIdx;
+    Texture<Vec3> baseColor = Vec3(1.0f);
 
-    float metallicFactor = 1.0f;
-    float roughnessFactor = 1.0f;
-    std::optional<std::size_t> metallicRoughnessTextureIdx;
+    Texture<float> metallic = 1.0f;
+    Texture<float> roughness = 1.0f;
 
-    Vec3 emissiveFactor = Vec3(0.0f);
+    Texture<Vec3> emissive = Vec3(0.0f);
     float emissiveStrength = 1.0f;
-    std::optional<std::size_t> emissiveTextureIdx;
 
-    float transmissionFactor = 0.0f;
-    std::optional<std::size_t> transmissionTextureIdx;
+    Texture<float> transmission = 0.0f;
 
     float ior = 1.5f;
 
     Path::Vertex::BounceType getType() const {
-        if (transmissionFactor > 0.5f && metallicFactor < 0.5f)
+        if (transmission.factor > 0.5f && metallic.factor < 0.5f)
             return Path::Vertex::BounceType::Refractive;
-        if (metallicFactor > 0.5f && roughnessFactor < 0.5f)
+        if (metallic.factor > 0.5f && roughness.factor < 0.5f)
             return Path::Vertex::BounceType::Reflective;
         return Path::Vertex::BounceType::Diffuse;
     }    

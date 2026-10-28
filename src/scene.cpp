@@ -7,6 +7,7 @@
 #include <cassert>
 #include <functional>
 #include <iostream>
+#include <map>
 #include <print>
 #include <numeric>
 
@@ -158,40 +159,64 @@ bool Scene::loadGltf(const std::filesystem::path& filePath) {
         assert(texture.imageIndex.has_value());
         textures.emplace_back(*texture.imageIndex);
     }
+    // glTF packs several scalar parameters into the channels of one image.
+    // Split them into single-channel images so that every scalar parameter
+    // samples its own texture.
+    std::map<std::pair<std::size_t, int>, std::size_t> channelTextures;
+    const auto channelTexture = [&](std::size_t textureIdx, int channel) {
+        const auto [it, inserted] = channelTextures.try_emplace(
+            std::make_pair(textureIdx, channel), textures.size());
+        if (inserted) {
+            const Image& source = images[textures[textureIdx].imageIdx];
+            const std::size_t imageIdx = images.size();
+            // Sampling an empty image yields 1, i.e. the factor alone.
+            images.push_back(
+                channel < source.channels()
+                    ? source.extractChannel(channel) : Image());
+            textures.emplace_back(imageIdx);
+        }
+        return it->second;
+    };
+
     // Load materials
     for (const fastgltf::Material& material : asset->materials) {
         MaterialData& newMaterial = materials.emplace_back(
             std::string(material.name));
 
         // Base color
-        for (int i = 0; i < 4; ++i)
-            newMaterial.baseColorFactor[i] = material.pbrData.baseColorFactor[i];
+        for (int i = 0; i < 3; ++i)
+            newMaterial.baseColor.factor[i] =
+                material.pbrData.baseColorFactor[i];
         if (material.pbrData.baseColorTexture)
-            newMaterial.baseColorTextureIdx =
+            newMaterial.baseColor.textureIdx =
                 material.pbrData.baseColorTexture->textureIndex;
 
-        // Metallic and roughness
-        newMaterial.metallicFactor = material.pbrData.metallicFactor;
-        newMaterial.roughnessFactor = material.pbrData.roughnessFactor;
-        if (material.pbrData.metallicRoughnessTexture)
-            newMaterial.metallicRoughnessTextureIdx =
+        // Metallic (B) and roughness (G) are packed into one texture.
+        newMaterial.metallic.factor = material.pbrData.metallicFactor;
+        newMaterial.roughness.factor = material.pbrData.roughnessFactor;
+        if (material.pbrData.metallicRoughnessTexture) {
+            const std::size_t textureIdx =
                 material.pbrData.metallicRoughnessTexture->textureIndex;
+            newMaterial.roughness.textureIdx = channelTexture(textureIdx, 1);
+            newMaterial.metallic.textureIdx = channelTexture(textureIdx, 2);
+        }
 
         // Emmisive
         for (int i = 0; i < 3; ++i)
-            newMaterial.emissiveFactor[i] = material.emissiveFactor[i];
+            newMaterial.emissive.factor[i] = material.emissiveFactor[i];
         newMaterial.emissiveStrength = material.emissiveStrength;
         if (material.emissiveTexture)
-            newMaterial.emissiveTextureIdx =
+            newMaterial.emissive.textureIdx =
                 material.emissiveTexture->textureIndex;
 
         // Transmission
         if (material.transmission) {
-            newMaterial.transmissionFactor =
+            newMaterial.transmission.factor =
                 material.transmission->transmissionFactor;
             if (material.transmission->transmissionTexture)
-                newMaterial.transmissionTextureIdx =
-                    material.transmission->transmissionTexture->textureIndex;
+                newMaterial.transmission.textureIdx = channelTexture(
+                    material.transmission->transmissionTexture->textureIndex,
+                    0);
         }
 
         // Index of refraction
@@ -330,7 +355,7 @@ bool Scene::loadGltf(const std::filesystem::path& filePath) {
                     : DefaultMaterialData;
 
             if (primitiveMaterial.emissiveStrength > 0.0f &&
-                    length2(primitiveMaterial.emissiveFactor) > 0.0f) {
+                    length2(primitiveMaterial.emissive.factor) > 0.0f) {
                 const auto& meshLight = std::get<MeshLight>(
                     lights.emplace_back(MeshLight{
                         .meshIdx = meshes.size(),

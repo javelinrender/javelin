@@ -37,6 +37,14 @@ void Image::flipVertically() {
     }
 }
 
+Image Image::extractChannel(int channel) const {
+    assert(0 <= channel && channel < _channels);
+    Image result(_width, _height, 1);
+    for (std::size_t i = 0; i < _width * _height; ++i)
+        result._pixels[i] = _pixels[i * _channels + channel];
+    return result;
+}
+
 void Image::load(const std::filesystem::path& fileName) {
     JAVELIN_ZONE_SCOPED;
     JAVELIN_ZONE_TEXTF("fileName=%s", fileName.string().c_str());

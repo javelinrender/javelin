@@ -114,6 +114,8 @@ public:
     void applyCorrection();
     void flipVertically();
 
+    [[nodiscard]] Image extractChannel(int channel) const;
+
     void load(const std::filesystem::path& fileName);
     void load(const std::span<const std::byte> bytes);
     void save(const std::filesystem::path& fileName) const;

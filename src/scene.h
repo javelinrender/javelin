@@ -12,6 +12,7 @@
 #include "material.h"
 #include "math.h"
 #include "mesh.h"
+#include "texture.h"
 #include "types.h"
 
 struct Camera {
@@ -60,7 +61,8 @@ struct MeshLight {
 
 using Light = std::variant<PointLight, MeshLight>;
 
-struct Texture {
+/// Maps a glTF texture to the image it samples.
+struct TextureSource {
     std::size_t imageIdx;
 };
 
@@ -70,7 +72,7 @@ public:
 
     Camera camera;
     std::vector<Mesh> meshes;
-    std::vector<Texture> textures;
+    std::vector<TextureSource> textures;
     std::vector<Image> images;
     std::vector<Light> lights;
 
@@ -109,21 +111,5 @@ public:
         const Mesh& mesh = meshes[meshIdx];
         assert(primitiveIdx < mesh.primitives.size());
         return getMaterial(mesh.primitives[primitiveIdx].materialIdx);
-    }
-
-    Vec3 sampleTexture(std::size_t textureIdx, const Vec2& textureCoord) const {
-        assert(0 <= textureIdx && textureIdx < textures.size());
-        const Texture& texture = textures[textureIdx];
-        const Image& image = images[texture.imageIdx];
-        if (image.empty())
-            return Vec3(1.0f);
-
-        // Repeating
-        std::size_t u = int(textureCoord.x * image.width()) % image.width();
-        std::size_t v = int(textureCoord.y * image.height()) % image.height();
-        if (u < 0) u += image.width();
-        if (v < 0) v += image.height();
-
-        return image.rgb(u, v);
     }
 };
