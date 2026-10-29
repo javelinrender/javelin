@@ -61,18 +61,12 @@ struct MeshLight {
 
 using Light = std::variant<PointLight, MeshLight>;
 
-/// Maps a texture to the image it samples.
-struct TextureSource {
-    std::size_t imageIdx;
-};
-
 class Scene {
 public:
     explicit Scene(Camera camera) : camera(camera) {}
 
     Camera camera;
     std::vector<Mesh> meshes;
-    std::vector<TextureSource> textures;
     std::vector<Image> images;
     std::vector<Light> lights;
 

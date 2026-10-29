@@ -12,10 +12,9 @@
 
 template<typename T>
 T Texture<T>::sample(const Scene& scene, const Vec2& textureCoord) const {
-    if (!textureIdx)
+    if (!imageIdx)
         return factor;
-    assert(*textureIdx < scene.textures.size());
-    const Image& image = scene.images[scene.textures[*textureIdx].imageIdx];
+    const Image& image = scene.images[*imageIdx];
     if (image.empty())
         return factor;
 
@@ -25,10 +24,8 @@ T Texture<T>::sample(const Scene& scene, const Vec2& textureCoord) const {
     if (v < 0) v += image.height();
 
     if constexpr (std::is_same_v<T, float>) {
-        assert(image.channels() == 1);
         return factor * image.r(u, v);
     } else {
-        assert(image.channels() >= 3);
         return factor * image.rgb(u, v);
     }
 }

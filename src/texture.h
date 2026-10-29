@@ -23,14 +23,14 @@ struct Texture {
         "Texture only supports float and Vec3 parameters");
 
     T factor{};
-    /// Index into `Scene::textures`.
-    std::optional<std::size_t> textureIdx;
+    /// Index into `Scene::images`.
+    std::optional<std::size_t> imageIdx;
 
     constexpr Texture() = default;
     constexpr Texture(
         const T& factor,
-        std::optional<std::size_t> textureIdx = std::nullopt)
-            : factor(factor), textureIdx(textureIdx) {}
+        std::optional<std::size_t> imageIdx = std::nullopt)
+            : factor(factor), imageIdx(imageIdx) {}
 
     T sample(const Scene& scene, const Vec2& textureCoord) const;
 };
