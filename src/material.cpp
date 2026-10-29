@@ -102,32 +102,19 @@ std::pair<Ray, Path::Vertex::BounceType> sampleDiffusedRay(
 } // namespace
 
 Vec3 Material::bsdf(const Path::Vertex& vertex) const {
-    Vec3 result = _data.baseColorFactor.xyz() / PI;
-    if(_data.baseColorTextureIdx) {
-        result *= _scene.sampleTexture(
-            *_data.baseColorTextureIdx, vertex.textureCoord);
-    }
-    return result;
+    return _data.baseColor.sample(_scene, vertex.textureCoord) / PI;
 }
 
 Vec3 Material::expectedContribution(const Path::Vertex& vertex, const Vec3& inDir) const {
-    Vec3 baseColor(1.0f);
-    if (_data.getType() != Path::Vertex::BounceType::Refractive) {
-        baseColor *= _data.baseColorFactor.xyz();
-        if (_data.baseColorTextureIdx)
-            baseColor *= _scene.sampleTexture(
-                    *_data.baseColorTextureIdx, vertex.textureCoord);
-    }
     // Refractive materials are always white for now.
-    return baseColor;
+    if (_data.getType() == Path::Vertex::BounceType::Refractive)
+        return Vec3(1.0f);
+    return _data.baseColor.sample(_scene, vertex.textureCoord);
 }
 
 Vec3 Material::emission(const Path::Vertex& vertex) const {
-    Vec3 emission = _data.emissiveFactor * _data.emissiveStrength;
-    if (emission != Vec3(0.0f) && _data.emissiveTextureIdx)
-        emission *= _scene.sampleTexture(
-            *_data.emissiveTextureIdx, vertex.textureCoord);
-    return emission;
+    return _data.emissive.sample(_scene, vertex.textureCoord) *
+        _data.emissiveStrength;
 }
 
 std::pair<Ray, Path::Vertex::BounceType> Material::sampleDirection(
