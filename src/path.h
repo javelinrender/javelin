@@ -14,6 +14,13 @@
 
 class Scene;
 
+/// Selects which material system is used to sample and evaluate paths.
+/// may be removed in the future.
+enum class MaterialModel {
+    Current, ///< The `javelin::materials` BSDF/PDF system.
+    Legacy,  ///< The original per-type material behaviour.
+};
+
 class Path {
 public:
     static constexpr std::size_t MaxLength = 10;
@@ -50,12 +57,15 @@ public:
     Path() : _pathLength(0) {}
     explicit Path(const Vertex &vertex) : _path{vertex}, _pathLength{1} {}
     /// Creates a random path in the scene originating from `ray`.
-    static Path createRandomEyePath(const Scene& scene, Ray ray);
+    static Path createRandomEyePath(
+        const Scene& scene, Ray ray,
+        MaterialModel model = MaterialModel::Current);
     static Path createRandomLightPath(const Scene& scene);
     std::optional<Ray> addBounce(
         const Scene& scene,
         const Ray& inRay,
-        std::optional<float> terminationProbability = std::nullopt);
+        std::optional<float> terminationProbability = std::nullopt,
+        MaterialModel model = MaterialModel::Current);
         
     void appendPath(Slice other);
 
@@ -82,7 +92,8 @@ struct EvaluationResult {
 
 EvaluationResult evaluateImplicit(
     const Scene& scene,
-    const Path::Vertex& v1, const Path::Vertex& v2, const Path::Vertex& v3);
+    const Path::Vertex& v1, const Path::Vertex& v2, const Path::Vertex& v3,
+    MaterialModel model = MaterialModel::Current);
 
 Vec3 evaluateExplicitLight(
     const Scene& scene,
@@ -94,4 +105,6 @@ Vec3 evaluateExplicit(
     const Path::Vertex& x1, const Path::Vertex& x2,
     const Path::Vertex& y1, const Path::Vertex& y2);
 
-EvaluationResult evaluate(const Scene& scene, Path::Slice slice);
+EvaluationResult evaluate(
+    const Scene& scene, Path::Slice slice,
+    MaterialModel model = MaterialModel::Current);

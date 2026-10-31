@@ -19,10 +19,10 @@ Application::Application(RenderSettings settings)
           Vec3(-0.262003f, -0.642788f, -0.719846f),
           Vec3(-0.219846f, 0.766044f, -0.604023f))) {}
 
-          // _settings.width.value, _settings.height.value, 45.0f, 0.032f,
-          // Vec3(0.0f, 0.0f, 1.5f),
-          // Vec3(0.0f, 0.0f, -1.0f),
-          // Vec3(0.0f, 1.0f, 0.0f))) {}
+        //   _settings.width.value, _settings.height.value, 45.0f, 0.032f,
+        //   Vec3(0.0f, 0.0f, 1.5f),
+        //   Vec3(0.0f, 0.0f, -1.0f),
+        //   Vec3(0.0f, 1.0f, 0.0f))) {}
           
 bool Application::initialize() {
     if (_initialized && _loadedScenePath == _settings.sceneFile.value)
@@ -119,7 +119,7 @@ void Application::applyShaderballMaterial() {
             .anisotropy = anisotropy,
             .ior = ior};
         break;
-    case Parameters::Pdf::DisneyBSDF:
+    case Parameters::Pdf::Disney:
         pdf = materials::pdf::Disney{
             .roughness = roughness,
             .anisotropy = anisotropy,

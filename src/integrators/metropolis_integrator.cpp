@@ -158,17 +158,13 @@ std::optional<MutationInfo> PathSpaceMutator::bidirectionalMutation(
         Path::Vertex& current = _potentialPath.last();
         const Vec3 inDir = current.position - _potentialPath.vertex(s-1).position;
         const Material& material = scene.getMaterial(current.materialIdx);
-        const Vec3 newDirection = javelin::materials::samplePdf(
-            scene, material.surfacePdf(), -inDir, current);
-        if (length2(newDirection) == 0.0f)
-            return std::nullopt;
-        ray = Ray(current.offsetPosition(newDirection), newDirection);
-        current.bounceType = material.getType();
+        std::tie(ray, current.bounceType) = material.sampleDirection(-inDir, current);
     }
 
     // Add our new vertices
     for (int i = 0;i < addedLength; ++i) {
-        ray = _potentialPath.addBounce(scene, *ray);
+        ray = _potentialPath.addBounce(
+            scene, *ray, std::nullopt, MaterialModel::Legacy);
         if (!ray)
             return std::nullopt;
     }
@@ -209,7 +205,8 @@ std::optional<MutationInfo> PathSpaceMutator::bidirectionalMutation(
     pa = twoSidedClippedGeoDist.pdf(deletedLength);
     Txy *= pd * pa;
 
-    info.proposal.evaluation = evaluate(scene, _potentialPath.toSlice());
+    info.proposal.evaluation = evaluate(
+        scene, _potentialPath.toSlice(), MaterialModel::Legacy);
     const float currentLuminance = luminance(_currentState->evaluation.radiance);
     const float proposalLuminance = luminance(info.proposal.evaluation.radiance);
     info.acceptance = std::min(1.0f, (proposalLuminance * Txy) / (currentLuminance * Tyx));
@@ -239,7 +236,8 @@ std::optional<MutationInfo> PathSpaceMutator::eyePathPerturbation(
     
     for (int i = 1;i < _currentPath->length(); ++i) {
         const Path::Vertex& currentVertex = _currentPath->vertex(i);
-        nextRay = _potentialPath.addBounce(scene, *nextRay);
+        nextRay = _potentialPath.addBounce(
+            scene, *nextRay, std::nullopt, MaterialModel::Legacy);
 
         if(!nextRay)
             return std::nullopt;
@@ -279,7 +277,8 @@ std::optional<MutationInfo> PathSpaceMutator::eyePathPerturbation(
         }
     }
 
-    info.proposal.evaluation = evaluate(scene, _potentialPath.toSlice());
+    info.proposal.evaluation = evaluate(
+        scene, _potentialPath.toSlice(), MaterialModel::Legacy);
     const float currentLuminance = luminance(_currentState->evaluation.radiance);
     const float proposalLuminance = luminance(info.proposal.evaluation.radiance);
 
@@ -292,7 +291,8 @@ std::optional<MutationInfo> PathSpaceMutator::computeNewPathMutation(
     MutationInfo info{.isNewPath = true};
     Ray newRay;
     std::tie(info.proposal.pixel, newRay) = randomEyeRay(scene);
-    _potentialPath = Path::createRandomEyePath(scene, newRay);
+    _potentialPath = Path::createRandomEyePath(
+        scene, newRay, MaterialModel::Legacy);
     if (_potentialPath.length() <= 1) {
         // set acceptance to 0 rather than rejecting since we need to preserve
         // the isNewPath = true
@@ -301,7 +301,8 @@ std::optional<MutationInfo> PathSpaceMutator::computeNewPathMutation(
         return info;
     }
     
-    info.proposal.evaluation = evaluate(scene, _potentialPath.toSlice());
+    info.proposal.evaluation = evaluate(
+        scene, _potentialPath.toSlice(), MaterialModel::Legacy);
     const float currentLuminance = luminance(
         _currentState->evaluation.russianRouletteRadiance);
     const float proposalLuminance = luminance(
@@ -329,8 +330,10 @@ void PathSpaceMutator::initialize(const Scene& scene, std::stop_token stopToken)
     while (!stopToken.stop_requested() && !_currentPath) {
         // Create a random path and evaluate it.
         const auto [pixel, ray] = randomEyeRay(scene);
-        const Path path = Path::createRandomEyePath(scene, ray);
-        EvaluationResult evaluation = evaluate(scene, path.toSlice());
+        const Path path = Path::createRandomEyePath(
+            scene, ray, MaterialModel::Legacy);
+        EvaluationResult evaluation = evaluate(
+            scene, path.toSlice(), MaterialModel::Legacy);
         const float lum = luminance(evaluation.radiance);
         // For a state to be valid, we need non-zero luminance.
         if (lum > Epsilon)

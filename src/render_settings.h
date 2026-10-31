@@ -185,7 +185,7 @@ struct ShaderballMaterialParameters {
         CosineWeighted,
         GGXVNDF,
         GGXVNDFGlass,
-        DisneyBSDF,
+        Disney,
     };
 
     static bool hasAnisotropy(const RenderSettings& settings);
@@ -218,7 +218,7 @@ struct ShaderballMaterialParameters {
             {Pdf::CosineWeighted, "cosine_weighted", "Cosine Weighted"},
             {Pdf::GGXVNDF, "ggx_vndf", "GGX VNDF"},
             {Pdf::GGXVNDFGlass, "ggx_vndf_glass", "GGX VNDF (Glass)"},
-            {Pdf::DisneyBSDF, "disney_bsdf", "Disney BSDF"},
+            {Pdf::Disney, "disney", "Disney"},
         },
     };
     FloatParameter baseColorR{

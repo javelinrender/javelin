@@ -93,7 +93,8 @@ Path Path::createRandomLightPath(const Scene& scene) {
 std::optional<Ray> Path::addBounce(
         const Scene& scene,
         const Ray& inRay,
-        std::optional<float> terminationProbability) {
+        std::optional<float> terminationProbability,
+        MaterialModel model) {
     std::optional<Scene::HitInfo> hit = scene.intersect(inRay);
 
     if (!hit)
@@ -101,7 +102,10 @@ std::optional<Ray> Path::addBounce(
 
     const Material& material = scene.getMaterial(hit->materialIdx);
     const bool backFace = dot(inRay.d, hit->geometricNormal) > 0.0f;
-    if (backFace) {
+    // The legacy material system handles refractive back faces itself.
+    const bool flipNormals = backFace && (model == MaterialModel::Current ||
+        material.getType() != Path::Vertex::BounceType::Refractive);
+    if (flipNormals) {
         hit->normal *= -1;
         hit->geometricNormal *= -1;
     }
@@ -116,6 +120,13 @@ std::optional<Ray> Path::addBounce(
 
     if (terminationProbability && PCG32::rand() < *terminationProbability)
         return std::nullopt;
+
+    if (model == MaterialModel::Legacy) {
+        const auto [newRay, bounceType] = material.sampleDirection(
+            -inRay.d, last());
+        last().bounceType = bounceType;
+        return newRay;
+    }
 
     const Vec3 newDirection = javelin::materials::samplePdf(
         scene, material.surfacePdf(), -inRay.d, last());
@@ -136,7 +147,8 @@ Path::Slice Path::getSlice(std::size_t first, std::size_t last) const {
     return Path::Slice(_path.begin() + first, _path.begin() + last);
 }
 
-Path Path::createRandomEyePath(const Scene& scene, Ray ray) {
+Path Path::createRandomEyePath(
+        const Scene& scene, Ray ray, MaterialModel model) {
     Path p;
     p._path[0] = Vertex{
         .bounceType = Path::Vertex::BounceType::None,
@@ -145,7 +157,8 @@ Path Path::createRandomEyePath(const Scene& scene, Ray ray) {
     
     p._pathLength = 1;
     while (p._pathLength < MaxLength) {
-        std::optional<Ray> nextRay = p.addBounce(scene, ray, TerminationProbability);
+        std::optional<Ray> nextRay = p.addBounce(
+            scene, ray, TerminationProbability, model);
         if(!nextRay) 
             return p;
         ray = *nextRay;
@@ -169,7 +182,8 @@ EvaluationResult evaluateImplicit(
     const Scene& scene,
     const Path::Vertex& v1,
     const Path::Vertex& v2,
-    const Path::Vertex& v3) {
+    const Path::Vertex& v3,
+    MaterialModel model) {
 
     EvaluationResult result;
 
@@ -178,11 +192,16 @@ EvaluationResult evaluateImplicit(
     constexpr float ContinuationProbability =
         1.0f - Path::TerminationProbability;
 
-    result.radiance = javelin::materials::evaluateBsdfWeight(
-        scene, material.surfaceBsdf(), material.surfacePdf(),
-        normalize(v1.position - v2.position),
-        normalize(v3.position - v2.position),
-        v2);
+    if (model == MaterialModel::Legacy) {
+        result.radiance =
+            material.expectedContribution(v2, v1.position - v2.position);
+    } else {
+        result.radiance = javelin::materials::evaluateBsdfWeight(
+            scene, material.surfaceBsdf(), material.surfacePdf(),
+            normalize(v1.position - v2.position),
+            normalize(v3.position - v2.position),
+            v2);
+    }
     result.russianRouletteRadiance = result.radiance / ContinuationProbability;
 
     return result;
@@ -258,7 +277,8 @@ Vec3 evaluateExplicit(
     return result;
 }
 
-EvaluationResult evaluate(const Scene& scene, Path::Slice path) {
+EvaluationResult evaluate(
+        const Scene& scene, Path::Slice path, MaterialModel model) {
     Vec3 throughput(1.0f);
     Vec3 russianRouletteThroughput(1.0f);
     EvaluationResult result{
@@ -272,7 +292,7 @@ EvaluationResult evaluate(const Scene& scene, Path::Slice path) {
         result.russianRouletteRadiance += russianRouletteThroughput * emission;
 
         EvaluationResult implicitEvaluation =
-            evaluateImplicit(scene, path[i-1], path[i], path[i+1]);
+            evaluateImplicit(scene, path[i-1], path[i], path[i+1], model);
         throughput *= implicitEvaluation.radiance;
         russianRouletteThroughput *= implicitEvaluation.russianRouletteRadiance;        
     }
