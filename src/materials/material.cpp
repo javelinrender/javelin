@@ -20,15 +20,32 @@ Vec3 tangentFor(const Vec3 normal) {
         normalize(cross(Vec3(1, 0, 0), normal));
 }
 
-Vec3 toWorld(const Vec3 local, const Vec3 normal) {
-    Vec3 tangent = tangentFor(normal);
-    Vec3 bitangent = cross(normal, tangent);
+// Orthonormal frame around `normal`. When `tangentHint` is nonzero (e.g. the
+// surface's UV tangent) it fixes the frame's orientation, which anisotropic
+// materials need to be consistent across the surface.
+void frameFor(
+        const Vec3& normal, const Vec3& tangentHint,
+        Vec3& tangent, Vec3& bitangent) {
+    tangent = tangentFor(normal);
+    const Vec3 projected = tangentHint - dot(tangentHint, normal) * normal;
+    if (dot(projected, projected) > 1e-12f)
+        tangent = normalize(projected);
+    bitangent = cross(normal, tangent);
+}
+
+Vec3 toWorld(
+        const Vec3 local, const Vec3 normal,
+        const Vec3& tangentHint = Vec3(0.0f)) {
+    Vec3 tangent, bitangent;
+    frameFor(normal, tangentHint, tangent, bitangent);
     return local.x * tangent + local.y * bitangent + local.z * normal;
 }
 
-Vec3 toLocal(const Vec3 world, const Vec3 normal) {
-    Vec3 tangent = tangentFor(normal);
-    Vec3 bitangent = cross(normal, tangent);
+Vec3 toLocal(
+        const Vec3 world, const Vec3 normal,
+        const Vec3& tangentHint = Vec3(0.0f)) {
+    Vec3 tangent, bitangent;
+    frameFor(normal, tangentHint, tangent, bitangent);
     return Vec3(dot(world, tangent), dot(world, bitangent), dot(world, normal));
 }
 
@@ -130,6 +147,7 @@ struct GlassConfiguration {
 
 struct GlassFrame {
     Vec3 normal;
+    Vec3 tangent;
     float eta;
 };
 
@@ -140,7 +158,9 @@ GlassFrame glassFrame(const Vec3& inDir, const Path::Vertex& vertex, float ior) 
         vertex.backFace ? -vertex.geometricNormal : vertex.geometricNormal;
     const Vec3 outwardNormal = vertex.backFace ? -vertex.normal : vertex.normal;
     const bool outside = dot(inDir, outwardGeometric) > 0.0f;
-    return {outside ? outwardNormal : -outwardNormal, outside ? ior : 1.0f / ior};
+    return {
+        outside ? outwardNormal : -outwardNormal, vertex.tangent,
+        outside ? ior : 1.0f / ior};
 }
 
 GlassConfiguration glassConfiguration(
@@ -153,8 +173,8 @@ GlassConfiguration glassConfiguration(
     const GlassFrame frame = glassFrame(inDir, vertex, ior);
     config.eta = frame.eta;
     config.alpha = alpha;
-    config.inLocal = toLocal(inDir, frame.normal);
-    config.outLocal = toLocal(outDir, frame.normal);
+    config.inLocal = toLocal(inDir, frame.normal, frame.tangent);
+    config.outLocal = toLocal(outDir, frame.normal, frame.tangent);
     const Vec3& in = config.inLocal;
     const Vec3& out = config.outLocal;
     if (in.z <= 0.0f || out.z == 0.0f)
@@ -292,12 +312,13 @@ Vec3 ggxReflection(
         const Vec2& alpha,
         const Vec3& inDir,
         const Vec3& outDir,
-        const Vec3& normal) {
-    const Vec3 inLocal = toLocal(inDir, normal);
-    const Vec3 outLocal = toLocal(outDir, normal);
+        const Vec3& normal,
+        const Vec3& tangent) {
+    const Vec3 inLocal = toLocal(inDir, normal, tangent);
+    const Vec3 outLocal = toLocal(outDir, normal, tangent);
     const Vec3 h = normalize(inDir + outDir);
     const Vec3 fresnel = schlick(f0, Vec3(1.0f), dot(h, outDir));
-    const float d = ggxD(toLocal(h, normal), alpha);
+    const float d = ggxD(toLocal(h, normal, tangent), alpha);
     const float g = smithG1(inLocal, alpha) * smithG1(outLocal, alpha);
     return fresnel * (d * g / (4.0f * std::abs(inLocal.z * outLocal.z)));
 }
@@ -416,7 +437,8 @@ Vec3 evaluateBsdf<bsdf::DisneyMetal>(
     const Vec2 alpha = detail::ggxAlpha(
         scene, bsdf.roughness, bsdf.anisotropy, vertex.textureCoord);
 
-    return detail::ggxReflection(baseColor, alpha, inDir, outDir, vertex.normal);
+    return detail::ggxReflection(
+        baseColor, alpha, inDir, outDir, vertex.normal, vertex.tangent);
 }
 
 template<>
@@ -428,12 +450,12 @@ Vec3 samplePdf<pdf::GGXVNDF>(
     const Vec2 alpha = detail::ggxAlpha(
         scene, pdf.roughness, pdf.anisotropy, vertex.textureCoord);
 
-    const Vec3 inLocal = detail::toLocal(inDir, vertex.normal);
+    const Vec3 inLocal = detail::toLocal(inDir, vertex.normal, vertex.tangent);
     const float u1 = PCG32::rand();
     const float u2 = PCG32::rand();
     const Vec3 h = detail::sampleGGXVNDF(inLocal, alpha, u1, u2);
     const Vec3 outLocal = 2.0f * dot(inLocal, h) * h - inLocal;
-    return detail::toWorld(outLocal, vertex.normal);
+    return detail::toWorld(outLocal, vertex.normal, vertex.tangent);
 }
 
 template<>
@@ -443,8 +465,8 @@ float evaluatePdf<pdf::GGXVNDF>(
         const Vec3& inDir,
         const Vec3& outDir,
         const Path::Vertex& vertex) {
-    const Vec3 inLocal = detail::toLocal(inDir, vertex.normal);
-    const Vec3 outLocal = detail::toLocal(outDir, vertex.normal);
+    const Vec3 inLocal = detail::toLocal(inDir, vertex.normal, vertex.tangent);
+    const Vec3 outLocal = detail::toLocal(outDir, vertex.normal, vertex.tangent);
     if (inLocal.z <= 0.0f || outLocal.z <= 0.0f)
         return 0.0f;
 
@@ -500,7 +522,7 @@ Vec3 samplePdf<pdf::GGXVNDFGlass>(
         scene, pdf.roughness, pdf.anisotropy, vertex.textureCoord);
 
     const detail::GlassFrame frame = detail::glassFrame(inDir, vertex, pdf.ior);
-    const Vec3 inLocal = detail::toLocal(inDir, frame.normal);
+    const Vec3 inLocal = detail::toLocal(inDir, frame.normal, frame.tangent);
     // Consume the random numbers up front so the stream doesn't depend on the
     // outcome.
     const float u1 = PCG32::rand();
@@ -525,7 +547,7 @@ Vec3 samplePdf<pdf::GGXVNDFGlass>(
         if (outLocal.z >= 0.0f)
             return Vec3(0.0f);
     }
-    return detail::toWorld(outLocal, frame.normal);
+    return detail::toWorld(outLocal, frame.normal, frame.tangent);
 }
 
 template<>
@@ -600,7 +622,7 @@ Vec3 evaluateDisneyBsdf(
             parameters.metallic * baseColor;
         const Vec2 alpha = ggxAlpha(parameters.roughness, parameters.anisotropy);
         result += weights.y * ggxReflection(
-            f0, alpha, inDir, outDir, frame.normal);
+            f0, alpha, inDir, outDir, frame.normal, frame.tangent);
     }
     return result;
 }

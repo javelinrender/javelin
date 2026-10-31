@@ -84,6 +84,7 @@ public:
         Vec3 geometricNormal;
         Vec2 textureCoord;
         std::optional<std::size_t> materialIdx;
+        Vec3 tangent = Vec3(0.0f);
     };
 
     std::optional<HitInfo> intersect(

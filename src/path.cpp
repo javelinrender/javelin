@@ -116,6 +116,7 @@ std::optional<Ray> Path::addBounce(
         hit->normal,
         hit->geometricNormal, hit->textureCoord, hit->materialIdx};
     _path[_pathLength].backFace = backFace;
+    _path[_pathLength].tangent = hit->tangent;
     ++_pathLength;
 
     if (terminationProbability && PCG32::rand() < *terminationProbability)

@@ -64,6 +64,13 @@ std::optional<Scene::HitInfo> Scene::intersect(
     const Vec3 edge2 = triangle.positions[2] - triangle.positions[0];
     const Vec3 weights = closestHit->hitInfo.barycentricCoords;
 
+    const Vec2 duv1 = triangle.textureCoords[1] - triangle.textureCoords[0];
+    const Vec2 duv2 = triangle.textureCoords[2] - triangle.textureCoords[0];
+    const float uvDeterminant = duv1.x * duv2.y - duv2.x * duv1.y;
+    Vec3 uvTangent(0.0f);
+    if (std::abs(uvDeterminant) > 1e-12f)
+        uvTangent = (edge1 * duv2.y - edge2 * duv1.y) / uvDeterminant;
+
     return HitInfo{
         .distance = closestHit->hitInfo.distance,
         .position = closestHit->hitInfo.position,
@@ -76,7 +83,8 @@ std::optional<Scene::HitInfo> Scene::intersect(
             weights[0] * triangle.textureCoords[0] +
             weights[1] * triangle.textureCoords[1] +
             weights[2] * triangle.textureCoords[2],
-        .materialIdx = closestHit->primitive.get().materialIdx};
+        .materialIdx = closestHit->primitive.get().materialIdx,
+        .tangent = uvTangent};
 }
 
 bool Scene::loadGltf(const std::filesystem::path& filePath) {

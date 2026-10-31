@@ -46,6 +46,9 @@ public:
         /// `normal` and `geometricNormal` are flipped to face the incoming ray;
         /// this is set if that flip happened (i.e. the ray hit the back side).
         bool backFace = false;
+        /// Direction of increasing u in the texture coordinates, or zero if
+        /// the triangle has degenerate texture coordinates.
+        Vec3 tangent = Vec3(0.0f);
 
         /// `position` nudged to the side of the surface that `direction`
         /// points towards, so that rays leaving the surface don't self-hit.
