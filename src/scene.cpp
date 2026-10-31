@@ -221,10 +221,18 @@ bool Scene::loadGltf(const std::filesystem::path& filePath) {
         // Index of refraction
         newMaterial.ior = material.ior;
 
-        // glTF has no extra parameters for Disney diffuse beyond these.
-        newMaterial.bsdf = javelin::materials::bsdf::DisneyDiffuse{
+        // glTF has no extra parameters for the Disney BSDF beyond these.
+        newMaterial.bsdf = javelin::materials::bsdf::Disney{
             .baseColor = newMaterial.baseColor,
-            .roughness = newMaterial.roughness};
+            .roughness = newMaterial.roughness,
+            .metallic = newMaterial.metallic,
+            .specularTransmission = newMaterial.transmission,
+            .ior = newMaterial.ior};
+        newMaterial.pdf = javelin::materials::pdf::Disney{
+            .roughness = newMaterial.roughness,
+            .metallic = newMaterial.metallic,
+            .specularTransmission = newMaterial.transmission,
+            .ior = newMaterial.ior};
 
         std::println(std::cout, "Loaded material name={}", material.name);
     }
