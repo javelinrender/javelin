@@ -82,7 +82,7 @@ std::optional<BVH::HitInfo> doesRayIntersectTriangle(
     const float alpha = 1 - beta - gamma;
 
     return BVH::HitInfo {
-        triangle.idx, t, ray.o + ray.d * t, {alpha, beta, gamma}};
+        triangle.idx, t, {alpha, beta, gamma}, unscaledGeoNormal};
 }
 
 /// Try to find an optimal two-way split using SAH.

@@ -60,18 +60,16 @@ std::optional<Scene::HitInfo> Scene::intersect(
 
     const Mesh::Triangle& triangle =
         closestHit->mesh.get().triangles[closestHit->hitInfo.triangleIdx];
-    const Vec3 edge1 = triangle.positions[1] - triangle.positions[0];
-    const Vec3 edge2 = triangle.positions[2] - triangle.positions[0];
     const Vec3 weights = closestHit->hitInfo.barycentricCoords;
 
     return HitInfo{
         .distance = closestHit->hitInfo.distance,
-        .position = closestHit->hitInfo.position,
+        .position = ray.o + ray.d * closestHit->hitInfo.distance,
         .normal = normalize(
             weights[0] * triangle.normals[0] +
             weights[1] * triangle.normals[1] +
             weights[2] * triangle.normals[2]),
-        .geometricNormal = normalize(cross(edge1, edge2)),
+        .geometricNormal = normalize(closestHit->hitInfo.unscaledGeoNormal),
         .textureCoord =
             weights[0] * triangle.textureCoords[0] +
             weights[1] * triangle.textureCoords[1] +

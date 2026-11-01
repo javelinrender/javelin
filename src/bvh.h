@@ -55,8 +55,8 @@ public:
     struct HitInfo {
         std::size_t triangleIdx;
         float distance;
-        Vec3 position;
         Vec3 barycentricCoords;
+        Vec3 unscaledGeoNormal;
     };
 
     std::optional<HitInfo> intersect(
