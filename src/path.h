@@ -111,3 +111,4 @@ Vec3 evaluateExplicit(
 EvaluationResult evaluate(
     const Scene& scene, Path::Slice slice,
     MaterialModel model = MaterialModel::Current);
+    
