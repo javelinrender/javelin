@@ -19,6 +19,7 @@ Loader {
         switch (parameter.type) {
         case "enum":      return "EnumParameterEditor.qml"
         case "integer":   return "IntegerParameterEditor.qml"
+        case "float":     return "FloatParameterEditor.qml"
         case "bool":      return "BoolParameterEditor.qml"
         case "file_path": return "FilePathParameterEditor.qml"
         case "group":     return "ParameterGroupEditor.qml"

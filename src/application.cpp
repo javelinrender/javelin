@@ -12,12 +12,18 @@ Application::Application(RenderSettings settings)
     : _settings(std::move(settings)),
       _pool(_settings.threadPoolSize.value),
       _scene(Camera(
-          _settings.width.value, _settings.height.value, 45.0f, 0.032f,
-          Vec3(0.0f, 0.0f, 1.5f),
-          Vec3(0.0f, 0.0f, -1.0f),
-          Vec3(0.0f, 1.0f, 0.0f))) {}
+          _settings.width.value,
+          _settings.height.value,
+          23.7f, 0.020955f,
+          Vec3(0.065315, 0.195, 0.179485),
+          Vec3(-0.262003f, -0.642788f, -0.719846f),
+          Vec3(-0.219846f, 0.766044f, -0.604023f))) {}
 
-
+        //   _settings.width.value, _settings.height.value, 45.0f, 0.032f,
+        //   Vec3(0.0f, 0.0f, 1.5f),
+        //   Vec3(0.0f, 0.0f, -1.0f),
+        //   Vec3(0.0f, 1.0f, 0.0f))) {}
+          
 bool Application::initialize() {
     if (_initialized && _loadedScenePath == _settings.sceneFile.value)
         return true;
@@ -34,7 +40,96 @@ void Application::startRender() {
         return;
     _pool.setThreadCount(_settings.threadPoolSize.value);
     _scene.camera.setResolution(_settings.width.value, _settings.height.value);
+    applyShaderballMaterial();
     _renderer.start(_scene, _settings, &_pool, 32);
+}
+
+void Application::applyShaderballMaterial() {
+    using Parameters = ShaderballMaterialParameters;
+    namespace materials = javelin::materials;
+    const Parameters& shaderball = _settings.shaderballMaterial;
+    const Vec3 baseColor(
+        shaderball.baseColorR.value,
+        shaderball.baseColorG.value,
+        shaderball.baseColorB.value);
+    const float roughness = shaderball.roughness.value;
+    const bool hasAnisotropy = Parameters::hasAnisotropy(_settings);
+    const float anisotropy = hasAnisotropy ? shaderball.anisotropy.value : 0.0f;
+    const float ior = shaderball.ior.value;
+
+    materials::BSDF bsdf;
+    switch (shaderball.bsdf.value) {
+    case Parameters::Bsdf::LambertianDiffuse:
+        bsdf = materials::bsdf::LambertianDiffuse{.baseColor = baseColor};
+        break;
+    case Parameters::Bsdf::DisneyDiffuse:
+        bsdf = materials::bsdf::DisneyDiffuse{
+            .baseColor = baseColor,
+            .roughness = roughness};
+        break;
+    case Parameters::Bsdf::DisneyMetal:
+        bsdf = materials::bsdf::DisneyMetal{
+            .baseColor = baseColor,
+            .roughness = roughness,
+            .anisotropy = anisotropy};
+        break;
+    case Parameters::Bsdf::DisneyGlass:
+        bsdf = materials::bsdf::DisneyGlass{
+            .baseColor = baseColor,
+            .roughness = roughness,
+            .anisotropy = anisotropy,
+            .ior = ior};
+        break;
+    case Parameters::Bsdf::DisneySheen:
+        bsdf = materials::bsdf::DisneySheen{
+            .baseColor = baseColor,
+            .sheenTint = shaderball.sheenTint.value};
+        break;
+    case Parameters::Bsdf::DisneyBSDF:
+        bsdf = materials::bsdf::Disney{
+            .baseColor = baseColor,
+            .roughness = roughness,
+            .anisotropy = anisotropy,
+            .metallic = shaderball.metallic.value,
+            .specularTransmission = shaderball.specularTransmission.value,
+            .specular = shaderball.specular.value,
+            .specularTint = shaderball.specularTint.value,
+            .sheen = shaderball.sheen.value,
+            .sheenTint = shaderball.sheenTint.value,
+            .ior = ior};
+        break;
+    }
+
+    materials::PDF pdf;
+    switch (shaderball.pdf.value) {
+    case Parameters::Pdf::Uniform:
+        pdf = materials::pdf::Uniform{};
+        break;
+    case Parameters::Pdf::CosineWeighted:
+        pdf = materials::pdf::CosineWeighted{};
+        break;
+    case Parameters::Pdf::GGXVNDF:
+        pdf = materials::pdf::GGXVNDF{
+            .roughness = roughness,
+            .anisotropy = anisotropy};
+        break;
+    case Parameters::Pdf::GGXVNDFGlass:
+        pdf = materials::pdf::GGXVNDFGlass{
+            .roughness = roughness,
+            .anisotropy = anisotropy,
+            .ior = ior};
+        break;
+    case Parameters::Pdf::Disney:
+        pdf = materials::pdf::Disney{
+            .roughness = roughness,
+            .anisotropy = anisotropy,
+            .metallic = shaderball.metallic.value,
+            .specularTransmission = shaderball.specularTransmission.value,
+            .ior = ior};
+        break;
+    }
+
+    _scene.setShaderballMaterial(bsdf, pdf);
 }
 
 void Application::handleSettingsChanged() {

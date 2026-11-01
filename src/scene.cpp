@@ -62,6 +62,13 @@ std::optional<Scene::HitInfo> Scene::intersect(
         closestHit->mesh.get().triangles[closestHit->hitInfo.triangleIdx];
     const Vec3 weights = closestHit->hitInfo.barycentricCoords;
 
+    const Vec2 duv1 = triangle.textureCoords[1] - triangle.textureCoords[0];
+    const Vec2 duv2 = triangle.textureCoords[2] - triangle.textureCoords[0];
+    const float uvDeterminant = duv1.x * duv2.y - duv2.x * duv1.y;
+    Vec3 uvTangent(0.0f);
+    if (std::abs(uvDeterminant) > 1e-12f)
+        uvTangent = (edge1 * duv2.y - edge2 * duv1.y) / uvDeterminant;
+
     return HitInfo{
         .distance = closestHit->hitInfo.distance,
         .position = ray.o + ray.d * closestHit->hitInfo.distance,
@@ -74,7 +81,8 @@ std::optional<Scene::HitInfo> Scene::intersect(
             weights[0] * triangle.textureCoords[0] +
             weights[1] * triangle.textureCoords[1] +
             weights[2] * triangle.textureCoords[2],
-        .materialIdx = closestHit->primitive.get().materialIdx};
+        .materialIdx = closestHit->primitive.get().materialIdx,
+        .tangent = uvTangent};
 }
 
 bool Scene::loadGltf(const std::filesystem::path& filePath) {
@@ -114,6 +122,7 @@ bool Scene::loadGltf(const std::filesystem::path& filePath) {
     images.clear();
     lights.clear();
     materials.clear();
+    _shaderballMaterialIdx.reset();
 
     // Load images
     // Adapted from example:
@@ -217,6 +226,19 @@ bool Scene::loadGltf(const std::filesystem::path& filePath) {
 
         // Index of refraction
         newMaterial.ior = material.ior;
+
+        // glTF has no extra parameters for the Disney BSDF beyond these.
+        newMaterial.bsdf = javelin::materials::bsdf::Disney{
+            .baseColor = newMaterial.baseColor,
+            .roughness = newMaterial.roughness,
+            .metallic = newMaterial.metallic,
+            .specularTransmission = newMaterial.transmission,
+            .ior = newMaterial.ior};
+        newMaterial.pdf = javelin::materials::pdf::Disney{
+            .roughness = newMaterial.roughness,
+            .metallic = newMaterial.metallic,
+            .specularTransmission = newMaterial.transmission,
+            .ior = newMaterial.ior};
 
         std::println(std::cout, "Loaded material name={}", material.name);
     }
@@ -342,6 +364,10 @@ bool Scene::loadGltf(const std::filesystem::path& filePath) {
                 newMesh.triangleAreas.push_back(triangleArea);
                 ++primitiveTriangleCount;
             }
+
+            // The shaderball scene's outer part is the "material_surface" mesh.
+            if (mesh.name == "material_surface" && primitive.materialIndex)
+                _shaderballMaterialIdx = *primitive.materialIndex;
 
             // If this primitive has an emmisive material, we need to also
             // add it as a light source.

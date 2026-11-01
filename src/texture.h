@@ -34,3 +34,6 @@ struct Texture {
 
     T sample(const Scene& scene, const Vec2& textureCoord) const;
 };
+
+using ColorTexture = Texture<Vec3>;
+using ScalarTexture = Texture<float>;

@@ -5,6 +5,7 @@
 #pragma once
 
 #include <algorithm>
+#include <filesystem>
 #include <functional>
 #include <optional>
 #include <string>
@@ -84,6 +85,15 @@ struct IntegerParameter {
     ParameterVisibility visible = true;
 };
 
+struct FloatParameter {
+    JAVELIN_PARAMETER_METADATA
+    float value;
+    std::optional<float> min;
+    std::optional<float> max;
+    float step = 0.01f;
+    ParameterVisibility visible = true;
+};
+
 struct BoolParameter {
     JAVELIN_PARAMETER_METADATA
     bool value;
@@ -160,12 +170,174 @@ struct MutationParameters {
         bidirectional)
 };
 
+/// Material of the outer part of the shaderball in the shaderball scene.
+struct ShaderballMaterialParameters {
+    enum class Bsdf {
+        LambertianDiffuse,
+        DisneyDiffuse,
+        DisneyMetal,
+        DisneyGlass,
+        DisneySheen,
+        DisneyBSDF,
+    };
+    enum class Pdf {
+        Uniform,
+        CosineWeighted,
+        GGXVNDF,
+        GGXVNDFGlass,
+        Disney,
+    };
+
+    static bool hasAnisotropy(const RenderSettings& settings);
+    static bool isDisneyGlass(const RenderSettings& settings);
+    static bool isDisneySheen(const RenderSettings& settings);
+    static bool isDisneyBSDF(const RenderSettings& settings);
+
+    static bool hasIor(const RenderSettings& settings);
+    static bool hasSheenTint(const RenderSettings& settings);
+
+    EnumParameter<Bsdf> bsdf{
+        .name = "shaderball_bsdf",
+        .label = "BSDF",
+        .value = Bsdf::DisneyDiffuse,
+        .choices = {
+            {Bsdf::LambertianDiffuse, "lambertian_diffuse", "Lambertian Diffuse"},
+            {Bsdf::DisneyDiffuse, "disney_diffuse", "Disney Diffuse"},
+            {Bsdf::DisneyMetal, "disney_metal", "Disney Metal"},
+            {Bsdf::DisneyGlass, "disney_glass", "Disney Glass"},
+            {Bsdf::DisneySheen, "disney_sheen", "Disney Sheen"},
+            {Bsdf::DisneyBSDF, "disney_bsdf", "Disney BSDF"},
+        },
+    };
+    EnumParameter<Pdf> pdf{
+        .name = "shaderball_pdf",
+        .label = "PDF",
+        .value = Pdf::CosineWeighted,
+        .choices = {
+            {Pdf::Uniform, "uniform", "Uniform"},
+            {Pdf::CosineWeighted, "cosine_weighted", "Cosine Weighted"},
+            {Pdf::GGXVNDF, "ggx_vndf", "GGX VNDF"},
+            {Pdf::GGXVNDFGlass, "ggx_vndf_glass", "GGX VNDF (Glass)"},
+            {Pdf::Disney, "disney", "Disney"},
+        },
+    };
+    FloatParameter baseColorR{
+        .name = "shaderball_base_color_r",
+        .label = "Base Color (Red)",
+        .value = 0.17585601f,
+        .min = 0.0f,
+        .max = 1.0f,
+    };
+    FloatParameter baseColorG{
+        .name = "shaderball_base_color_g",
+        .label = "Base Color (Green)",
+        .value = 0.40394878f,
+        .min = 0.0f,
+        .max = 1.0f,
+    };
+    FloatParameter baseColorB{
+        .name = "shaderball_base_color_b",
+        .label = "Base Color (Blue)",
+        .value = 0.79992914f,
+        .min = 0.0f,
+        .max = 1.0f,
+    };
+    FloatParameter roughness{
+        .name = "shaderball_roughness",
+        .label = "Roughness",
+        .value = 0.5f,
+        .min = 0.0f,
+        .max = 1.0f,
+    };
+    FloatParameter anisotropy{
+        .name = "shaderball_anisotropy",
+        .label = "Anisotropy",
+        .value = 0.0f,
+        .min = 0.0f,
+        .max = 1.0f,
+        .visible = hasAnisotropy,
+    };
+    FloatParameter ior{
+        .name = "shaderball_ior",
+        .label = "Index of Refraction",
+        .value = 1.5f,
+        .min = 1.01f,
+        .max = 2.5f,
+        .visible = hasIor,
+    };
+
+    FloatParameter metallic{
+        .name = "shaderball_metallic",
+        .label = "Metallic",
+        .value = 0.0f,
+        .min = 0.0f,
+        .max = 1.0f,
+        .visible = isDisneyBSDF,
+    };
+    FloatParameter specularTransmission{
+        .name = "shaderball_specular_transmission",
+        .label = "Specular Transmission",
+        .value = 0.0f,
+        .min = 0.0f,
+        .max = 1.0f,
+        .visible = isDisneyBSDF,
+    };
+    FloatParameter specular{
+        .name = "shaderball_specular",
+        .label = "Specular",
+        .value = 1.0f,
+        .min = 0.0f,
+        .max = 1.0f,
+        .visible = isDisneyBSDF,
+    };
+    FloatParameter specularTint{
+        .name = "shaderball_specular_tint",
+        .label = "Specular Tint",
+        .value = 0.0f,
+        .min = 0.0f,
+        .max = 1.0f,
+        .visible = isDisneyBSDF,
+    };
+    FloatParameter sheen{
+        .name = "shaderball_sheen",
+        .label = "Sheen",
+        .value = 0.0f,
+        .min = 0.0f,
+        .max = 1.0f,
+        .visible = isDisneyBSDF,
+    };
+    FloatParameter sheenTint{
+        .name = "shaderball_sheen_tint",
+        .label = "Sheen Tint",
+        .value = 0.0f,
+        .min = 0.0f,
+        .max = 1.0f,
+        .visible = hasSheenTint,
+    };
+
+    JAVELIN_REGISTER_PARAMETERS(
+        bsdf,
+        pdf,
+        baseColorR,
+        baseColorG,
+        baseColorB,
+        roughness,
+        anisotropy,
+        ior,
+        metallic,
+        specularTransmission,
+        specular,
+        specularTint,
+        sheen,
+        sheenTint)
+};
+
 struct RenderSettings {
     FilePathParameter sceneFile{
         .name = "scene_file",
         .label = "Scene File",
         .cli = {'s', "scene"},
-        .value = "./media/cornellbox_plane_light.glb",
+        .value = "./media/shaderball.glb",
         .extensions = {".glb"},
     };
 
@@ -225,6 +397,11 @@ struct RenderSettings {
         return settings.integrator.value == Integrator::Metropolis;
     }
 
+    static bool isShaderballScene(const RenderSettings& settings) {
+        return std::filesystem::path(settings.sceneFile.value).stem() ==
+            "shaderball";
+    }
+
     IntegerParameter<int> metropolisMarkovChains{
         .name = "metropolis_markov_chains",
         .label = "Markov Chains",
@@ -239,6 +416,11 @@ struct RenderSettings {
         .label = "Enabled Mutations",
         .visible = isMetropolis,
     };
+    ParameterGroup<ShaderballMaterialParameters> shaderballMaterial{
+        .name = "shaderball_material",
+        .label = "Shaderball Material",
+        .visible = isShaderballScene,
+    };
 
     JAVELIN_REGISTER_PARAMETERS(
         sceneFile,
@@ -248,7 +430,8 @@ struct RenderSettings {
         samplesPerPixel,
         threadPoolSize,
         metropolisMarkovChains,
-        metropolisMutations)
+        metropolisMutations,
+        shaderballMaterial)
 
     template<typename Function>
     void forEachParameter(Function&& function) {

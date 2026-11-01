@@ -14,6 +14,7 @@
 #include "mesh.h"
 #include "texture.h"
 #include "types.h"
+#include "materials/material.h"
 
 struct Camera {
     Camera(
@@ -73,6 +74,7 @@ public:
 private:
     static inline const MaterialData DefaultMaterialData{};
     std::vector<MaterialData> materials;
+    std::optional<std::size_t> _shaderballMaterialIdx;
 
 public:
     struct HitInfo {
@@ -82,6 +84,7 @@ public:
         Vec3 geometricNormal;
         Vec2 textureCoord;
         std::optional<std::size_t> materialIdx;
+        Vec3 tangent = Vec3(0.0f);
     };
 
     std::optional<HitInfo> intersect(
@@ -90,6 +93,19 @@ public:
         float maxDistance = std::numeric_limits<float>::max()) const;
 
     bool loadGltf(const std::filesystem::path& filePath);
+
+    /// Overrides the BSDF and PDF of the shaderball's outer part.
+    /// @returns false if the loaded scene is not the shaderball scene.
+    bool setShaderballMaterial(
+            const javelin::materials::BSDF& bsdf,
+            const javelin::materials::PDF& pdf) {
+        if (!_shaderballMaterialIdx)
+            return false;
+        MaterialData& material = materials[*_shaderballMaterialIdx];
+        material.bsdf = bsdf;
+        material.pdf = pdf;
+        return true;
+    }
 
     Ray eyeRay(Vec2 pixel) const;
 
