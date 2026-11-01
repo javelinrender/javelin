@@ -53,29 +53,33 @@ std::optional<BVH::HitInfo> doesRayIntersectTriangle(
     const Vec3& ca = triangle.ca;
     const Vec3 oa = triangle.a - ray.o;
 
-    // Unnormalized!!! Scaled by triangle area.
-    const Vec3 geometricNormal = cross(ba, ca); 
-    const float determinant = dot(geometricNormal, ray.d);
-
-    // Scale the epsilon value by the triangle area.
-    if (determinant * determinant <= Epsilon * Epsilon * dot(geometricNormal, geometricNormal))
-        return std::nullopt; // The ray is parallel to the triangle.
+    const Vec3 p = cross(ca, ray.d);
+    const float determinant = dot(ba, p);
+    if (determinant == 0)
+        return std::nullopt; // The ray is exactly parallel to the triangle.
 
     const float invDeterminant = 1 / determinant;
 
-    const float beta = dot(cross(oa, ca), ray.d) * invDeterminant;
-    if (beta < 0 || beta > 1)
+    // The comparisons are written so that NaNs (from a denormal determinant) are rejected.
+    const float beta = dot(oa, p) * invDeterminant;
+    if (!(beta >= 0 && beta <= 1))
         return std::nullopt;
 
-    const float gamma = dot(cross(ba, oa), ray.d) * invDeterminant;
-    if (gamma < 0 || beta + gamma > 1)
+    const Vec3 q = cross(ba, oa);
+    const float gamma = dot(ray.d, q) * invDeterminant;
+    if (!(gamma >= 0 && beta + gamma <= 1))
+        return std::nullopt;
+
+    const float t = -dot(ca, q) * invDeterminant;
+    if (!(t >= minDistance && t <= maxDistance))
+        return std::nullopt;
+
+    // Near-parallel rejection test. Note this is only done for candidate hits.
+    const Vec3 unscaledGeoNormal = cross(ba, ca);
+    if (determinant * determinant <= Epsilon * Epsilon * dot(unscaledGeoNormal, unscaledGeoNormal))
         return std::nullopt;
 
     const float alpha = 1 - beta - gamma;
-
-    const float t = dot(geometricNormal, oa) * invDeterminant;
-    if (t < minDistance || t > maxDistance)
-        return std::nullopt;
 
     return BVH::HitInfo {
         triangle.idx, t, ray.o + ray.d * t, {alpha, beta, gamma}};
